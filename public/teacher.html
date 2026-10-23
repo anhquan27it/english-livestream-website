@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Giáo viên · EngLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a href="/" class="brand"><span class="brand-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
+      <nav class="side-nav">
+        <a class="active" href="#overview"><i data-lucide="layout-dashboard"></i> Tổng quan</a>
+        <a href="#classes"><i data-lucide="school"></i> Lớp học của tôi</a>
+        <a href="#detail"><i data-lucide="users"></i> Quản lý học sinh</a>
+      </nav>
+      <div class="side-foot">
+        <div class="promo"><span class="emoji">🎙️</span><b>Teaching tip</b><p>Ghim 3–5 từ vựng mỗi buổi để học sinh dễ ghi nhớ hơn.</p></div>
+        <div class="me">
+          <span data-me-avatar></span>
+          <div class="info"><b data-me-name></b><small>Giáo viên</small></div>
+          <button class="icon-btn" data-logout title="Đăng xuất"><i data-lucide="log-out"></i></button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" id="overview">
+      <div class="topbar">
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+          <div>
+            <h1 id="hello"></h1>
+            <p>Sẵn sàng cho buổi dạy hôm nay chưa?</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary" id="newClassBtn"><i data-lucide="plus"></i> Tạo lớp mới</button>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="section-title" id="classes"><h2>Lớp học của tôi</h2></div>
+      <div class="class-grid" id="classGrid"></div>
+
+      <div id="detail"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/teacher.js"></script>
+</body>
+</html>

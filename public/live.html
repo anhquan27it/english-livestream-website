@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lớp học trực tiếp · EngLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="live-body">
+  <div class="live-app">
+    <section class="stage-wrap">
+      <div class="live-top">
+        <div class="left">
+          <button class="back" id="backBtn" title="Rời phòng"><i data-lucide="arrow-left"></i></button>
+          <div style="min-width:0">
+            <h1 id="liveTitle">Đang tải...</h1>
+            <small id="liveSub"></small>
+          </div>
+        </div>
+        <div class="right">
+          <span class="badge-live" id="liveBadge" hidden>LIVE</span>
+          <span class="badge-dark" id="timer"><i data-lucide="clock"></i> 00:00</span>
+          <span class="badge-dark"><i data-lucide="eye"></i> <span id="viewerCount">0</span></span>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <video id="video" playsinline autoplay></video>
+        <div class="word-overlay" id="wordOverlay" hidden></div>
+        <div class="stage-state" id="stageState">
+          <div><div class="spinner"></div><h2>Đang kết nối...</h2></div>
+        </div>
+      </div>
+
+      <div class="controls" id="controls"></div>
+    </section>
+
+    <aside class="side-panel">
+      <div class="panel-tabs">
+        <button class="active" data-panel="chat"><i data-lucide="message-circle"></i> Chat</button>
+        <button data-panel="people"><i data-lucide="users"></i> <span id="peopleLabel">Học sinh</span> <span class="count" id="peopleCount">0</span></button>
+      </div>
+      <div class="panel-body" id="chatPanel"><div class="chat-list" id="chatList"></div></div>
+      <div class="panel-body" id="peoplePanel" hidden></div>
+      <div id="chatBox">
+        <div class="quick" id="quick"></div>
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" maxlength="500" placeholder="Type a message in English..." autocomplete="off" />
+          <button aria-label="Gửi"><i data-lucide="send"></i></button>
+        </form>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/live.js"></script>
+</body>
+</html>
