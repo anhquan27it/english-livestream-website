@@ -1,20 +1,24 @@
-﻿{
-    "name":  "englive",
-    "version":  "1.0.0",
-    "description":  "EngLive - web hoc tieng Anh livestream (giao vien / hoc sinh)",
-    "main":  "server.js",
-    "scripts":  {
-                    "start":  "node server.js",
-                    "dev":  "node --watch server.js"
-                },
-    "keywords":  [
-
-                 ],
-    "author":  "",
-    "license":  "ISC",
-    "type":  "commonjs",
-    "dependencies":  {
-                         "express":  "^4.22.3",
-                         "socket.io":  "^4.8.4"
-                     }
+{
+  "name": "englive",
+  "version": "1.0.0",
+  "description": "EngLive - web hoc tieng Anh livestream (giao vien / hoc sinh)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node tests/smoke.js",
+    "dev:mock": "node tests/dev-mock.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4",
+    "unpdf": "^1.9.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
 }

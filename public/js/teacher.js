@@ -3,6 +3,7 @@ let classes = [];
 let selectedId = null;
 
 if (me) {
+  buildSidebar('teacher', 'overview');
   setupShell(me);
   document.getElementById('hello').textContent = `${greeting()}, ${me.name}! 👋`;
   load();

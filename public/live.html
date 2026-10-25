@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/studio.css" />
 </head>
 <body class="live-body">
   <div class="live-app">
@@ -29,6 +30,8 @@
 
       <div class="stage" id="stage">
         <video id="video" playsinline autoplay></video>
+        <div class="slide-layer" id="slideLayer"></div>
+        <button class="btn btn-sm btn-outline swap-btn" id="swapBtn" title="Đổi vị trí video và slide"><i data-lucide="repeat-2"></i> Đổi khung</button>
         <div class="word-overlay" id="wordOverlay" hidden></div>
         <div class="stage-state" id="stageState">
           <div><div class="spinner"></div><h2>Đang kết nối...</h2></div>
@@ -41,10 +44,14 @@
     <aside class="side-panel">
       <div class="panel-tabs">
         <button class="active" data-panel="chat"><i data-lucide="message-circle"></i> Chat</button>
+        <button data-panel="lesson" id="tabLesson" hidden><i data-lucide="presentation"></i> Bài giảng</button>
+        <button data-panel="ai" id="tabAi" hidden><i data-lucide="bot"></i> AI</button>
         <button data-panel="people"><i data-lucide="users"></i> <span id="peopleLabel">Học sinh</span> <span class="count" id="peopleCount">0</span></button>
       </div>
       <div class="panel-body" id="chatPanel"><div class="chat-list" id="chatList"></div></div>
       <div class="panel-body" id="peoplePanel" hidden></div>
+      <div class="panel-body" id="lessonPanel" hidden></div>
+      <div class="panel-body" id="aiPanel" hidden style="padding:0"></div>
       <div id="chatBox">
         <div class="quick" id="quick"></div>
         <form class="chat-form" id="chatForm">
@@ -58,6 +65,9 @@
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/slides.js"></script>
+  <script src="/js/aichat.js"></script>
+  <script src="/js/lesson-live.js"></script>
   <script src="/js/live.js"></script>
 </body>
 </html>

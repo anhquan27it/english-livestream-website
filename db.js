@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'db.json');
 
 let db = null;
@@ -73,6 +73,10 @@ function load() {
     seed();
     save();
   }
+  // Thêm các trường mới cho dữ liệu cũ
+  db.settings = db.settings || {};
+  db.lessons = db.lessons || [];
+  db.chats = db.chats || [];
 }
 
 let saveTimer = null;

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hỏi đáp AI · EngLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/studio.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="topbar">
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+          <div><h1>Hỏi đáp cùng AI 🤖</h1><p>Hỏi về bài giảng đã học hoặc luyện tiếng Anh bất cứ lúc nào.</p></div>
+        </div>
+        <div class="topbar-actions"><select class="input" id="classSel" style="width:auto"></select></div>
+      </div>
+      <div class="tutor-wrap">
+        <div class="tutor-side" id="side"></div>
+        <div class="tutor-chat" id="chat"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/aichat.js"></script>
+  <script src="/js/tutor.js"></script>
+</body>
+</html>

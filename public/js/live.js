@@ -7,6 +7,7 @@ const RTC = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'st
 const $ = (id) => document.getElementById(id);
 const video = $('video');
 let socket;
+let aiChat = null;
 let live = null;
 let timerInt = null;
 let ended = false;
@@ -46,12 +47,17 @@ async function init() {
   }
 
   setupUi();
+  LessonLive.init({
+    isTeacher, socket: null, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel'),
+    onChange: () => aiChat && aiChat.reload(),
+  });
   if (isTeacher) {
     showState(null, 'Đang bật camera & micro...', 'Hãy cho phép trình duyệt truy cập camera và micro.');
     await startMedia();
   }
 
   socket = connectSocket();
+  LessonLive.init({ socket });
   socket.on('connect', joinRoom);
   socket.on('connect_error', () => toast('Mất kết nối máy chủ, đang thử lại...', 'error'));
   socket.on('chat', addChat);
@@ -60,6 +66,7 @@ async function init() {
   socket.on('live:ended', ({ reason }) => finish('👋', 'Buổi học đã kết thúc', reason));
   socket.on('kicked', ({ reason }) => finish('🚪', 'Bạn đã rời buổi học', reason));
   socket.on('signal', onSignal);
+  socket.on('lesson:state', (st) => LessonLive.apply(st));
 
   if (isTeacher) {
     socket.on('viewer:joined', (v) => { viewers.set(v.socketId, v); renderPeople(); callViewer(v.socketId); });
@@ -89,6 +96,9 @@ function joinRoom() {
     $('viewerCount').textContent = live.viewers;
     startTimer(live.startedAt);
     showWord(res.word);
+    LessonLive.apply(res.lesson);
+    const wanted = new URLSearchParams(location.search).get('lesson');
+    if (isTeacher && wanted && !res.lesson) LessonLive.present(wanted);
     if (isTeacher) {
       // Kết nối (lại) tới tất cả học sinh đang có mặt
       viewers.clear();
@@ -287,12 +297,16 @@ function setupUi() {
     socket.emit('chat', { text });
     $('chatInput').value = '';
   };
+  const panels = { chat: 'chatPanel', people: 'peoplePanel', lesson: 'lessonPanel', ai: 'aiPanel' };
+  $('tabLesson').hidden = !isTeacher;
+  $('tabAi').hidden = isTeacher;
+  if (!isTeacher) aiChat = AiChat.mount($('aiPanel'), { classId, dark: true });
   document.querySelectorAll('[data-panel]').forEach((b) => (b.onclick = () => {
     document.querySelectorAll('[data-panel]').forEach((x) => x.classList.toggle('active', x === b));
-    $('chatPanel').hidden = b.dataset.panel !== 'chat';
-    $('peoplePanel').hidden = b.dataset.panel !== 'people';
+    Object.entries(panels).forEach(([k, id]) => ($(id).hidden = b.dataset.panel !== k));
     $('chatBox').hidden = b.dataset.panel !== 'chat';
   }));
+  $('swapBtn').onclick = () => $('stage').classList.toggle('swap');
   addChat({ system: true, text: isTeacher ? 'Bạn đang ở phòng livestream. Chỉ học sinh trong lớp mới xem được.' : 'Welcome to class! Hãy dùng tiếng Anh khi chat nhé 😊' });
   renderControls();
   renderPeople();
@@ -445,6 +459,7 @@ function finish(emoji, title, text) {
   peers.forEach((p) => p.close());
   closeStudentPeer();
   video.srcObject = null;
+  LessonLive.apply(null);
   $('wordOverlay').hidden = true;
   $('controls').innerHTML = '';
   if (socket) socket.disconnect();

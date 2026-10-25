@@ -34,6 +34,25 @@ Tài khoản mẫu (mật khẩu `123456`):
   giơ tay, nghe phát âm từ vựng, Word of the day, thống kê chuyên cần.
 - Server kiểm tra quyền ở cả API và Socket.IO: không phải thành viên lớp thì không vào được phòng và không nhận được tín hiệu WebRTC.
 
+## Bài giảng AI, trò chơi tương tác và chat AI
+
+Quy trình mượn ý tưởng từ [OpenMAIC](https://github.com/THU-MAIC/OpenMAIC) (MIT): *tài liệu → outline → sinh từng slide → chỉnh sửa → trình chiếu*.
+
+1. **Cài đặt AI** (giáo viên → menu *Cài đặt AI*): mặc định 9Router `http://localhost:20128` với model `ag/gemini-3.8-flash-high`.
+   Dán API key lấy ở trang *Endpoint & Key* của 9Router rồi bấm **Lưu & kiểm tra kết nối**. Có thể thêm OpenAI, Gemini, OpenRouter, Ollama…
+   (mọi nhà cung cấp chuẩn OpenAI-compatible), chọn model riêng cho việc soạn bài và cho chat học sinh.
+   Hoặc đặt biến môi trường `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` trước khi chạy.
+2. **Bài giảng** (giáo viên → menu *Bài giảng*): tải PDF/TXT/MD hoặc nhập chủ đề → AI đề xuất outline → bạn sửa → AI sinh slide
+   (chạy nền trên máy chủ). Mỗi slide sửa được bằng form, hoặc bấm *Sinh lại* kèm yêu cầu riêng. Loại slide: nội dung (kèm từ vựng + phát âm),
+   trắc nghiệm, bình chọn, ghép cặp, xếp từ thành câu. Tự lưu.
+3. **Livestream**: bấm *Livestream bài này* (hoặc vào phòng live → tab *Bài giảng*). Học sinh thấy slide, video giáo viên thu nhỏ ở góc.
+   Giáo viên chuyển slide (phím ←/→), *Bắt đầu hoạt động* → học sinh bấm trả lời → *Chốt* để công bố đáp án, điểm, bảng xếp hạng.
+4. **Chat AI**: học sinh có tab *AI* ngay trong phòng live (AI biết slide đang chiếu, không lộ đáp án hoạt động chưa chốt)
+   và trang *Hỏi đáp AI* để hỏi về bài giảng đã học sau buổi học. Lịch sử được lưu theo từng bài.
+
+Thử giao diện không cần 9Router: `npm run dev:mock` (http://localhost:3001, AI giả lập). Kiểm thử tự động: `npm test`.
+Kế hoạch và tiến độ chi tiết: [PROJECT.md](PROJECT.md).
+
 ## Đưa lên mạng để hai người test
 
 GitHub lưu mã nguồn của dự án. GitHub Pages (`github.io`) chỉ chạy web tĩnh, không chạy được
@@ -74,7 +93,7 @@ Tham khảo: [Render Node.js](https://render.com/docs/deploy-node-express-app),
 ## Kỹ thuật
 
 - Node.js + Express + Socket.IO (signaling), WebRTC peer-to-peer (giáo viên gửi tới từng học sinh).
-- Dữ liệu lưu ở `data/db.json` (xoá file này để tạo lại dữ liệu mẫu).
+- Dữ liệu lưu ở `data/db.json` (xoá file này để tạo lại dữ liệu mẫu), gồm cả bài giảng, cài đặt AI (có API key) và lịch sử chat AI.
 - Camera/micro cần `localhost` hoặc **HTTPS** khi triển khai thật.
 - Mô hình P2P phù hợp lớp nhỏ (~10–20 học sinh). Lớp đông hoặc học sinh ở mạng khác nhau sau NAT chặt
   nên thêm TURN server hoặc chuyển sang SFU (LiveKit, mediasoup).

@@ -138,3 +138,20 @@ function setupShell(user) {
 function connectSocket() {
   return io({ auth: { token: Auth.token } });
 }
+
+// Thanh bên dùng chung cho các trang giáo viên / học sinh
+function buildSidebar(role, active) {
+  const nav = role === 'teacher'
+    ? [['overview', '/teacher.html', 'layout-dashboard', 'Tổng quan'], ['lessons', '/lessons.html', 'presentation', 'Bài giảng'], ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI']]
+    : [['home', '/student.html', 'house', 'Trang chủ'], ['tutor', '/tutor.html', 'bot', 'Hỏi đáp AI']];
+  const promo = role === 'teacher'
+    ? '<div class="promo"><span class="emoji">🎙️</span><b>Teaching tip</b><p>Soạn bài trước, chiếu slide và chơi game để lớp học sôi động hơn.</p></div>'
+    : '<div class="promo" style="background:linear-gradient(150deg,#ff8a3d,#f43f6e)"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
+  document.getElementById('sidebar').innerHTML = `
+    <a href="/" class="brand"><span class="brand-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
+    <nav class="side-nav">${nav.map(([id, href, ic, label]) => `<a href="${href}" class="${id === active ? 'active' : ''}"><i data-lucide="${ic}"></i> ${label}</a>`).join('')}
+      ${role === 'student' && active === 'home' ? '<a href="#" id="joinNav"><i data-lucide="key-round"></i> Nhập mã lớp</a>' : ''}</nav>
+    <div class="side-foot">${promo}
+      <div class="me"><span data-me-avatar></span><div class="info"><b data-me-name></b><small>${role === 'teacher' ? 'Giáo viên' : 'Học sinh'}</small></div>
+      <button class="icon-btn" data-logout title="Đăng xuất"><i data-lucide="log-out"></i></button></div></div>`;
+}

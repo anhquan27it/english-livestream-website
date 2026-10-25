@@ -1,9 +1,4 @@
 node_modules/
 data/
-.env
-.env.*
-!.env.example
-*.log
+data-mock/
 .claude/
-.DS_Store
-Thumbs.db

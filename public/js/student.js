@@ -13,6 +13,7 @@ const WORDS = [
 ];
 
 if (me) {
+  buildSidebar('student', 'home');
   setupShell(me);
   document.getElementById('hello').textContent = `${greeting()}, ${me.name}! ☀️`;
   renderWord();
@@ -79,7 +80,7 @@ function render() {
             : `<span class="chip chip-ok"><i data-lucide="check"></i> Đã học ${c.attended}/${c.sessions} buổi</span>`}
           ${c.live
             ? `<a class="btn btn-live btn-sm" href="/live.html?class=${c.id}"><i data-lucide="play"></i> Vào học</a>`
-            : c.status === 'member' ? '<span class="chip chip-muted">Chưa live</span>' : ''}
+            : c.status === 'member' ? `<a class="btn btn-outline btn-sm" href="/tutor.html?class=${c.id}"><i data-lucide="bot"></i> Hỏi AI</a>` : ''}
         </div>
       </div>
     </article>`).join('') : `

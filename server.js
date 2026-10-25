@@ -4,12 +4,15 @@ const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
 const store = require('./db');
+const lessons = require('./lessons');
+const presentMod = require('./present');
+const aiRoutes = require('./aiRoutes');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kiểm tra dịch vụ sau khi triển khai, không cần đăng nhập.
@@ -17,7 +20,9 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 // ---------- Trạng thái livestream (trong bộ nhớ) ----------
 // classId -> { title, startedAt, teacherSocket, viewers: Map<socketId, {userId, name, hand}>, attendees:Set, peak, word }
+// Thêm: lesson (bản chụp bài giảng đang chiếu), slideIndex, activity (hoạt động đang mở), scores (điểm theo học sinh) - xem present.js
 const lives = new Map();
+const present = presentMod.init({ io, lives });
 
 // ---------- Helpers ----------
 const db = () => store.data;
@@ -124,6 +129,11 @@ app.post('/api/logout', auth(), (req, res) => {
 });
 
 app.get('/api/me', auth(), (req, res) => res.json({ user: publicUser(req.user) }));
+
+// ---------- Bài giảng + AI ----------
+lessons.recoverJobs();
+app.use(lessons.createRouter({ auth, findClass }));
+app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive }));
 
 // ---------- Lớp học ----------
 app.get('/api/classes', auth(), (req, res) => {
@@ -253,7 +263,7 @@ app.post('/api/classes/:id/live', auth('teacher'), (req, res) => {
   if (!c) return;
   if (!lives.has(c.id)) {
     const title = String((req.body || {}).title || '').trim() || 'Buổi học trực tiếp';
-    lives.set(c.id, { title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), peak: 0, word: null });
+    lives.set(c.id, { title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map() });
     notifyClass(c);
   }
   res.json({ live: liveInfo(c.id) });
@@ -269,12 +279,15 @@ app.delete('/api/classes/:id/live', auth('teacher'), (req, res) => {
 function endLive(c, reason) {
   const live = lives.get(c.id);
   if (!live) return;
+  present.endActivity(live);
   c.history.unshift({
     title: live.title,
     startedAt: live.startedAt,
     endedAt: Date.now(),
     peak: live.peak,
     attendees: [...live.attendees],
+    lessonTitle: live.lesson ? live.lesson.title : '',
+    scores: present.ranking(live).slice(0, 10),
   });
   c.history = c.history.slice(0, 50);
   store.save();
@@ -340,6 +353,7 @@ io.on('connection', (socket) => {
         ok: true,
         live: liveInfo(classId),
         word: live.word,
+        lesson: present.stateFor(live, { teacher: true }),
         viewers: [...live.viewers].map(([sid, v]) => ({ socketId: sid, ...v })),
       });
     }
@@ -359,8 +373,10 @@ io.on('connection', (socket) => {
     io.to('live:' + classId).emit('viewers:count', live.viewers.size);
     socket.to('live:' + classId).emit('chat', { system: true, text: `${user.name} đã tham gia lớp học`, at: Date.now() });
     notifyClass(c);
-    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket });
+    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }) });
   });
+
+  present.attach(socket);
 
   // Chuyển tiếp offer/answer/ICE giữa giáo viên và học sinh trong cùng phòng
   socket.on('signal', ({ to, data }) => {
