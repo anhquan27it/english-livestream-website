@@ -692,35 +692,59 @@ async function toggleRecord() {
   if (rec) return stopRecord();
   if (typeof MediaRecorder === 'undefined') return toast('Trình duyệt này không hỗ trợ ghi hình.', 'error');
   ensureMixer();
-  const canvas = document.createElement('canvas');
-  canvas.width = 1280; canvas.height = 720;
-  const ctx = canvas.getContext('2d');
-  // Vẽ lại phần tử video mỗi khung hình nên đổi giữa camera và chia sẻ màn hình vẫn được ghi liền mạch
-  const draw = () => {
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1280, 720);
-    const vw = video.videoWidth, vh = video.videoHeight;
-    if (vw && vh) { const k = Math.min(1280 / vw, 720 / vh); ctx.drawImage(video, (1280 - vw * k) / 2, (720 - vh * k) / 2, vw * k, vh * k); }
-  };
-  draw();
-  const timer = setInterval(draw, 40);
-  const stream = canvas.captureStream(25);
-  stream.addTrack(Mixer.allTrack);
+  // Cách 1 (ưu tiên): quay đúng khung sân khấu như học sinh thấy (slide, PDF, bảng viết, phụ đề, video giáo viên) bằng cách chia sẻ
+  // chính tab này rồi cắt vùng theo phần tử sân khấu. Trình duyệt sẽ hiện hộp thoại xin quyền; hãy chọn tab EngLive hiện tại.
+  let capStream = null, videoTrack = null, timer = null;
+  try {
+    toast('Hãy chọn tab EngLive này trong hộp thoại chia sẻ để ghi cả slide.');
+    capStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 25 }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude' });
+    videoTrack = capStream.getVideoTracks()[0];
+    try {
+      if (window.CropTarget && videoTrack.cropTo) await videoTrack.cropTo(await CropTarget.fromElement($('stage')));
+    } catch { /* không cắt được (chọn màn hình/cửa sổ khác): ghi toàn bộ phần được chia sẻ */ }
+  } catch {
+    capStream = null;
+    videoTrack = null;
+  }
+  let stream;
+  if (videoTrack) {
+    stream = new MediaStream([videoTrack, Mixer.allTrack]);
+  } else {
+    // Cách 2 (dự phòng): chỉ ghi video của giáo viên (camera hoặc màn hình chia sẻ), không có slide
+    toast('Không quay được khung slide — chỉ ghi camera/màn hình của bạn.', 'error');
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280; canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+    // Vẽ lại phần tử video mỗi khung hình nên đổi giữa camera và chia sẻ màn hình vẫn được ghi liền mạch
+    const draw = () => {
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1280, 720);
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (vw && vh) { const k = Math.min(1280 / vw, 720 / vh); ctx.drawImage(video, (1280 - vw * k) / 2, (720 - vh * k) / 2, vw * k, vh * k); }
+    };
+    draw();
+    timer = setInterval(draw, 40);
+    stream = canvas.captureStream(25);
+    stream.addTrack(Mixer.allTrack);
+  }
   const mime = ['video/webm;codecs=vp8,opus', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
-  const mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 });
+  const mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1000000, audioBitsPerSecond: 64000 });
   const chunks = [];
   mr.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+  const startedAt = Date.now();
   mr.onstop = () => {
     clearInterval(timer);
+    if (capStream) capStream.getTracks().forEach((t) => t.stop());
     const seconds = Math.round((Date.now() - startedAt) / 1000);
     const blob = new Blob(chunks, { type: 'video/webm' });
     // MediaRecorder không ghi thời lượng vào webm nên không tua được; thư viện này (MIT) bổ sung thông tin đó
     if (window.ysFixWebmDuration) window.ysFixWebmDuration(blob, seconds * 1000, (fixed) => saveRecordingModal(fixed, seconds));
     else saveRecordingModal(blob, seconds);
   };
-  const startedAt = Date.now();
+  // Giáo viên bấm "Dừng chia sẻ" của trình duyệt -> kết thúc bản ghi
+  if (videoTrack) videoTrack.onended = () => stopRecord();
   mr.start(2000);
-  rec = { mr, startedAt, tick: setInterval(renderControls, 1000) };
-  toast('● Đang ghi hình buổi học', 'success');
+  rec = { mr, startedAt, tick: setInterval(renderControls, 1000), withSlides: !!videoTrack };
+  toast(videoTrack ? '● Đang ghi hình sân khấu (kèm slide)' : '● Đang ghi hình (chỉ camera/màn hình)', 'success');
   renderControls();
 }
 
@@ -755,8 +779,14 @@ function saveRecordingModal(blob, seconds) {
         headers: { Authorization: 'Bearer ' + Auth.token, 'X-Title': encodeURIComponent(m.querySelector('#recTitle').value), 'X-Duration': String(seconds) },
         body: blob,
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error);
+      let d = null;
+      try { d = await res.json(); } catch { /* không phải JSON */ }
+      if (!res.ok) {
+        throw new Error((d && d.error) || (res.status === 404
+          ? 'Máy chủ chưa có chức năng lưu bản ghi (đang chạy bản cũ). Hãy khởi động lại server (npm start) rồi bấm Tải về để không mất bản ghi.'
+          : res.status === 413 ? 'Bản ghi quá lớn để tải lên (giới hạn 500 MB, và 100 MB nếu đang dùng đường dẫn cloudflared). Hãy bấm Tải về.'
+          : 'Tải lên thất bại (mã ' + res.status + '). Hãy bấm Tải về để giữ bản ghi.'));
+      }
       toast('Đã lưu bản ghi cho lớp', 'success');
       m.close();
     } catch (err) {

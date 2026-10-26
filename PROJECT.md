@@ -1,13 +1,19 @@
 # PROJECT.md — kế hoạch & tiến độ EngLive
 
-Cập nhật lần cuối: 2026-10-26
+Cập nhật lần cuối: 2026-10-26 (cuối phiên làm việc thứ nhất; xong giai đoạn 0–5 và Đợt 1–2 của giai đoạn 7)
 
 ## Trạng thái hiện tại (đọc mục này trước)
-- **Tính năng giai đoạn 1–5 đã xong, đã push lên GitHub** (commit `4002dd9`, nhánh `main`). Repo: https://github.com/anhquan27it/english-livestream-website (đã đổi tên từ `...webesite`; remote `origin` vẫn trỏ tên cũ, GitHub tự chuyển hướng).
-- **Sau commit `4002dd9` còn thay đổi chưa commit**: file tài liệu này và `CLAUDE.md` đã sửa; các chỉnh trước đó (slide trên sân khấu giáo viên, nút chọn tệp, luật phạm vi AI, tăng tốc sinh bài, `tests/bench.js`) **đã nằm trong commit** — hãy `git status` để xác nhận.
-- **Máy người dùng đang chạy**: `node server.js` ẩn nền ở cổng 3000 (tôi khởi động lại 2026-10-25 để lấy code mới) + `cloudflared tunnel` (link tạm dạng `https://xxxx.trycloudflare.com`, đổi mỗi lần bật, chết khi tắt tunnel/máy) để bạn bè test vai học sinh. 9Router phải đang mở trên máy người dùng cho phần AI. Tắt: `taskkill /IM cloudflared.exe /F` và `taskkill /IM node.exe /F`.
-- **Render** (https://english-livestream.onrender.com, `render.yaml` gói `free`): đang chạy **bản cũ** (chỉ livestream/chat/giơ tay/thẻ từ vựng) cho tới khi Render deploy lại từ `main`. Trên Render AI **không** dùng được (9Router ở máy người dùng) và dữ liệu mất khi restart/ngủ. Người dùng đã được nhắc tự kiểm tra gói trong dashboard Render (Instance Type = Free).
-- **Chưa kiểm thử**: camera/micro thật cùng slide giữa hai máy khác mạng (có thể cần TURN); nút "Chọn tệp từ máy" và slide trên sân khấu giáo viên (vừa sửa, đã kiểm tra cú pháp, chưa duyệt lại trên trình duyệt); chất lượng nội dung của `flash-low`; luật phạm vi AI với Gemini thật (chỉ test bằng mock).
+- **Đã push lên GitHub**: HEAD `22336d4` = `origin/main` (gồm giai đoạn 0–5, Đợt 1, Đợt 2). Repo: https://github.com/anhquan27it/english-livestream-website (đã đổi tên từ `...webesite`; remote `origin` vẫn trỏ tên cũ, GitHub tự chuyển hướng).
+- **Chưa commit (sau `22336d4`)** — hãy `git status` để xác nhận, rồi hỏi người dùng trước khi commit/push:
+  1. Khung "**Slide tiếp theo**" bên phải phòng live của giáo viên (thay cho xem trước slide hiện tại; bấm để chuyển; máy chủ chỉ gửi `nextScene` cho giáo viên): `present.js`, `public/js/lesson-live.js`, `public/css/studio.css`, test mới → `npm test` = **33** kiểm tra.
+  2. **Ghi hình kèm slide**: ưu tiên chia sẻ chính tab rồi cắt theo khung sân khấu (`getDisplayMedia` + `CropTarget`), tự quay lại chế độ camera nếu không được; báo lỗi tải lên rõ ràng: `public/js/live.js`. **Chưa thử được chế độ tab-capture** (môi trường kiểm thử chặn hộp thoại chia sẻ).
+  3. Sửa bố cục trang soạn bài ở khổ 760–1180 px: danh sách slide thành dải ngang, hết đè lên biểu mẫu (`public/css/studio.css`). Đã kiểm tra ở 820 và 1400 px.
+  4. Các file tài liệu (`PROJECT.md`, `CLAUDE.md`, `README.md`).
+- **Máy người dùng (Windows)**: không chắc server đang chạy. Tôi đã tắt tiến trình `node server.js` cũ ở cổng 3000 hai lần; **mỗi lần đổi code server người dùng phải tự chạy lại `npm start`** (từng gặp: bản ghi không lưu được vì server cũ trả 404; `EADDRINUSE` khi vừa tôi vừa người dùng mở server). Quy ước: tắt tiến trình cũ rồi nhờ người dùng tự `npm start` trong terminal của họ, đừng mở thêm server ẩn ở cổng 3000. Người dùng tự chạy `cloudflared tunnel --url http://localhost:3000` khi cần cho bạn bè test (link `trycloudflare.com` đổi mỗi lần, chết khi tắt tunnel/máy; `winget install Cloudflare.cloudflared` đã cài). 9Router phải đang mở cho phần AI; API key 9Router đã được nhập đúng trong Cài đặt AI (lưu ở `data/db.json`).
+- **Render** (https://english-livestream.onrender.com, `render.yaml` gói `free`): nếu bật tự deploy thì đã nhận `22336d4` hoặc sắp nhận (chưa xác nhận). Trên Render AI **không** dùng được (9Router ở máy người dùng), dữ liệu/bản ghi/PDF mất khi restart-ngủ.
+- **Quyết định hạ tầng video (đã bàn, chưa làm gì)**: P2P hiện chỉ hợp ~10–20 học sinh. Google Meet (Add-ons SDK / Media API) **loại** — không có SDK nhúng cuộc gọi và sẽ mất các tính năng quanh video. Zoom (Meeting/Video/Apps SDK) **không chọn** vì người dùng không có gói Zoom; nếu sau này có thì thêm Zoom Video SDK qua lớp trung gian. **Hướng đã đề xuất: LiveKit** + lớp trung gian truyền hình giữ P2P cho lớp nhỏ (chi tiết ở mục *Hạ tầng video cho lớp đông*).
+- **Câu hỏi đang chờ người dùng**: (1) số học sinh tối đa mỗi lớp (30/100/300?); (2) LiveKit Cloud hay tự chạy; khoá LiveKit **không dán vào chat**, nhập qua cấu hình/biến môi trường; (3) làm LiveKit trước hay Đợt 3 (admin/trợ giảng/lịch/nhắc lịch) trước; (4) có commit + push các thay đổi chưa commit không.
+- **Chưa kiểm thử (cần người dùng thử bằng thiết bị thật)**: micro/camera thật (mọi thứ mới chỉ thử bằng micro/camera giả `?fakemic=1`), nhận dạng giọng nói thật (phụ đề, đọc to), ghi hình tab-capture, phòng nhỏ ≥3 người, hai máy ở hai mạng khác nhau (có thể cần TURN), lớp đông, Firefox/Safari, PDF lớn, trình duyệt di động thật, luật phạm vi AI với Gemini thật ở các ca mập mờ, chất lượng nội dung `flash-low`.
 
 ## Mục tiêu
 1. **Trước buổi học**: giáo viên tải PDF/văn bản (hoặc chỉ nhập chủ đề) → AI sinh *bài giảng* gồm slide, trò chơi/câu hỏi tương tác → giáo viên xem, sửa, lưu.
@@ -33,9 +39,9 @@ Các lựa chọn khác:
 - Dữ liệu: JSON file (`data/db.json`) gồm `users, classes, tokens, settings.ai, lessons, chats`. Slide render bằng HTML/CSS thuần (`public/js/slides.js`, co giãn bằng `cqw`).
 
 ## Giao diện & luồng
-- Giáo viên: `/teacher.html` (lớp), `/lessons.html` (tạo/sửa bài; hash route `#/new`, `#/l/<id>`, `#/l/<id>/outline`), `/ai-settings.html`, phòng live `/live.html?class=<id>[&lesson=<id>]` (tab Chat | Bài giảng | Học sinh).
-- Học sinh: `/student.html` (lớp, banner "đang live"), `/live.html?class=<id>` (slide giữa, video giáo viên ở góc, nút "Đổi khung"; tab Chat | AI | Từ vựng), `/tutor.html` (hỏi đáp sau buổi học).
-- API chính: `/api/lessons[...]`, `/api/lessons/upload` (body nhị phân, header `X-Filename`), `/api/ai/*`, `/api/classes/:id/lessons`. Socket: `lesson:present|stop`, `slide:goto`, `activity:start|end|answer`, `lesson:state`, `activity:stats`.
+- Giáo viên: `/teacher.html` (lớp), `/lessons.html` (tạo/sửa bài; hash route `#/new`, `#/l/<id>`, `#/l/<id>/outline`), `/ai-settings.html`, phòng live `/live.html?class=<id>[&lesson=<id>]` (tab Chat | Bài giảng | Nhóm | Viết | Học sinh; tab Bài giảng có khung "Slide tiếp theo" ở trên, bấm để chuyển slide). Thanh điều khiển: Micro, Camera, Chia sẻ màn hình, Phát file nghe, Ghi hình, Tắt mic lớp, Phụ đề, Thẻ từ vựng, Kết thúc.
+- Học sinh: `/student.html` (lớp, banner "đang live"), `/live.html?class=<id>` (slide giữa, video giáo viên ở góc, nút "Đổi khung"; tab Chat | AI | Từ vựng; lớp phủ trên sân khấu khi có bảng viết `#padLayer` hoặc phòng nhỏ `#boLayer`), `/tutor.html` (hỏi đáp sau buổi học). Thẻ lớp có nút 🎞 xem bản ghi.
+- API chính: `/api/lessons[...]`, `/api/lessons/upload` (body nhị phân, header `X-Filename`), `/api/ai/*`, `/api/classes/:id/lessons`. Socket: `lesson:present|stop`, `slide:goto`, `activity:start|end|answer`, `lesson:state` (giáo viên có thêm `fullScene`, `nextScene`, `outline`), `activity:stats`, `speak:*`, `speaker`, `reaction`, `star:give`, `caption`, `pad:*`, `pdf:*`, `breakout:*`, `bo:signal`.
 
 ## Tiến độ
 Ký hiệu: ✅ xong · 🟡 đang làm · ⬜ chưa làm
@@ -60,7 +66,7 @@ Giáo viên thấy slide trên sân khấu chính (video mình thu nhỏ) + bả
 Tab AI trong live + `/tutor.html`; luật phạm vi (chỉ tiếng Anh/bài học, chống lệnh nhúng); giới hạn 20 tin/phút/người; lỗi AI không lộ chi tiết cho học sinh.
 
 ### Kiểm thử
-- ✅ `npm test`: 20 kiểm tra (quyền, sinh bài, từ chối chủ đề lạc đề, đa dạng bố cục + nguồn + đoạn trích theo slide, hoạt động, chấm điểm, không lộ đáp án, chat AI, luật phạm vi).
+- ✅ `npm test`: **33** kiểm tra (đã thêm sau mốc này: tương tác lớp học, bản ghi, điền từ/đọc to, phụ đề, bảng viết, PDF, phòng nhỏ, slide tiếp theo; ban đầu 20: quyền, sinh bài, từ chối chủ đề lạc đề, đa dạng bố cục + nguồn + đoạn trích theo slide, hoạt động, chấm điểm, không lộ đáp án, chat AI, luật phạm vi).
 - ✅ Với AI thật: `tests/bench.js` (tốc độ), `tests/scope-check.js` (cổng phạm vi, 5/6 đúng; ca tài liệu tiếng Việt về lịch sử không bị từ chối mà biến thành bài tiếng Anh), `tests/fidelity.js` (độ bám tài liệu + đa dạng).
 - ✅ Duyệt trình duyệt (`npm run dev:mock`): cài đặt AI, tạo bài, editor, live 2 tab, quiz/xếp câu/ghép cặp, chat AI, hỏi đáp sau buổi học.
 - ✅ 9Router thật: kết nối + tạo bài hoàn chỉnh qua `tests/bench.js` (người dùng đã nhập đúng API key).
@@ -99,14 +105,14 @@ Người dùng gửi danh sách 4 phân hệ (quản lý lớp/lịch, phòng li
 Trạng thái từng đợt được cập nhật ở mục *Tiến độ → Giai đoạn 7*.
 
 ### Giai đoạn 7 — Yêu cầu mở rộng (theo từng đợt)
-**Đợt 1 ✅ (2026-10-26, chưa commit)** — âm thanh hai chiều & công cụ điều phối:
+**Đợt 1 ✅ (2026-10-26, đã commit `22336d4`)** — âm thanh hai chiều & công cụ điều phối:
 - ✅ Học sinh phát biểu: giáo viên bấm 🎤 cạnh tên (tab *Học sinh*) → học sinh bật mic, giọng được giáo viên **trộn** vào luồng phát cho cả lớp (`public/js/mixer.js`, Web Audio); người đang nói nhận luồng riêng *không có giọng mình* (tránh vọng). Mỗi lúc một học sinh; "Tắt mic lớp" thu lại; học sinh rời phòng/giáo viên rời thì tự thu mic. Server giữ quyền (`interact.js`, sự kiện `speak:grant|revoke`, `speaker`).
 - ✅ Phát file nghe (mp3/wav/mp4…) trộn vào luồng → cả lớp nghe đồng thời, âm thanh gốc; thanh phát có tạm dừng/tua/âm lượng.
 - ✅ Chia sẻ màn hình kèm âm thanh hệ thống/tab (khi người dùng tick "Chia sẻ âm thanh" trong hộp thoại của trình duyệt) trộn vào luồng.
-- ✅ Ghi hình buổi học (video camera/màn hình + âm thanh trộn, 720p ~800kbps) → xem trước, tải về hoặc **lưu lên lớp**; thành viên lớp xem lại ở nút 🎞 trên thẻ lớp (`recordings.js`, lưu ở `data/recordings/`, tối đa 500 MB/bản ghi, thư viện MIT `fix-webm-duration` để tua được). **Chưa** kèm slide trong bản ghi.
+- ✅ Ghi hình buổi học (video camera/màn hình + âm thanh trộn, 720p ~800kbps) → xem trước, tải về hoặc **lưu lên lớp**; thành viên lớp xem lại ở nút 🎞 trên thẻ lớp (`recordings.js`, lưu ở `data/recordings/`, tối đa 500 MB/bản ghi, thư viện MIT `fix-webm-duration` để tua được). Ban đầu chỉ ghi video giáo viên; từ 2026-10-26 (sau phản hồi) ưu tiên **chia sẻ chính tab này rồi cắt theo khung sân khấu** (`getDisplayMedia` + `CropTarget`) để bản ghi có cả slide/PDF/bảng viết/phụ đề; nếu không quay được thì tự quay lại chế độ chỉ camera/màn hình. Chế độ tab-capture mới được viết, **chưa thử được** trong môi trường kiểm thử (chỉ thử chế độ dự phòng). Lỗi người dùng gặp: bản ghi không lưu được vì server chạy bản cũ (404) — giờ báo lỗi rõ ràng.
 - ✅ Reactions (👍❤️😂👏😮🎉🙋) bay trên sân khấu, giới hạn tần suất; tặng sao (+10 điểm, hiện trên bảng xếp hạng); đếm ngược 15–120 giây cho hoạt động (máy chủ tự chốt khi hết giờ, thanh đếm ngược trên máy học sinh dùng thời gian còn lại do máy chủ gửi để không lệch đồng hồ).
 - Kiểm thử: `npm test` 26 kiểm tra (thêm quyền phát biểu, reaction, sao, đếm ngược, bản ghi). Trình duyệt thật với **micro giả** (`?fakemic=1`: giáo viên 220Hz, học sinh 660Hz): học sinh khác nghe cả 220+660Hz; người đang nói chỉ nghe 220Hz; thu mic → 660Hz biến mất; file nghe 1000Hz tới học sinh; bản ghi phát được, có thời lượng. **Chưa thử**: micro/camera thật, hộp thoại xin quyền, âm thanh hệ thống thật, Safari/Firefox, nhiều học sinh cùng lúc, hai mạng khác nhau.
-**Đợt 2 ✅ (2026-10-26, chưa commit)** — Điền từ, đọc to, phụ đề, bảng viết, PDF, phòng nhỏ:
+**Đợt 2 ✅ (2026-10-26, đã commit `22336d4`)** — Điền từ, đọc to, phụ đề, bảng viết, PDF, phòng nhỏ:
 - ✅ Hai loại scene mới (AI sinh được, editor có form): **`fill`** (điền từ gõ: câu có `___`, nhiều đáp án chấp nhận, không phân biệt hoa/thường/dấu câu) và **`speak`** (đọc to: nhận dạng giọng nói của trình duyệt → máy chủ chấm theo dãy con chung dài nhất giữa các từ, ≥80% là đúng, trả chi tiết từng từ đúng/sai). Đáp án không lộ trước khi chốt. Hạn chế: máy chủ không kiểm chứng được âm thanh, chỉ thấy văn bản nhận dạng (học sinh có thể gian lận bằng client sửa).
 - ✅ **Phụ đề trực tiếp**: giáo viên bật (chọn English US/UK hoặc Tiếng Việt) → chữ hiện dưới sân khấu cả lớp; học sinh bật/tắt. Chỉ nghe micro của giáo viên (không thu file nghe/âm thanh hệ thống).
 - ✅ **Bảng viết cộng tác** (`writing.js`, `public/js/pad.js`): giáo viên mở đề → học sinh viết (tự gửi khi gõ) → giáo viên xem trực tiếp, "Chiếu & sửa" một bài cho cả lớp → bôi đen đoạn văn, chọn màu (Lỗi/Gợi ý/Hay/Ghi chú), nhập "sửa thành…" và ghi chú; cả lớp thấy ngay.
@@ -116,6 +122,24 @@ Trạng thái từng đợt được cập nhật ở mục *Tiến độ → Gi
 - Kiểm thử: `npm test` **32** kiểm tra (thêm điền từ, đọc to, phụ đề, bảng viết, PDF, phòng nhỏ). Trình duyệt thật với micro/camera giả (3 tab: giáo viên + 2 học sinh, `?fakemic=1`): điền từ & đọc to (kết quả tô màu từng từ), đếm ngược tự chốt, bảng viết + tô màu hiển thị đúng ở cả hai phía, PDF đồng bộ trang, phòng nhỏ (mỗi học sinh nghe đúng giọng/tần số của bạn mình, giáo viên ghé thăm thấy cả hai, học sinh thấy ô "Giáo viên", kết thúc trả về phòng chính và bật lại tiếng). AI thật (`tests/fidelity.js`) sinh được `fill` từ "Exercise A" của tài liệu mẫu và `speak` từ hội thoại.
 - **Chưa thử**: nhận dạng giọng nói thật (phụ đề, đọc to — môi trường thử không có micro/dịch vụ nhận dạng; chỉ thử đường truyền văn bản), camera/micro thật trong phòng nhỏ, nhóm ≥3 người, hai mạng khác nhau (mesh cần TURN nếu mạng chặt), lớp đông, Firefox/Safari (Web Speech API không có), PDF lớn/nhiều trang, kết hợp bản ghi với phòng nhỏ (bản ghi chỉ ghi video+âm thanh giáo viên). Khi tab ở nền, pdf.js tạm dừng vẽ cho tới khi tab hiện lại (hành vi của trình duyệt).
 **Đợt 3 ⬜** — Admin / trợ giảng, thời khoá biểu + phòng ảo theo lịch + chống trùng lịch, nhắc lịch Email (SMTP) / Web Push, slide đi kèm bản ghi.
+
+## Hạ tầng video cho lớp đông (đã bàn 2026-10-26 — CHƯA LÀM)
+Bối cảnh: video/âm thanh hiện là WebRTC P2P (giáo viên gửi tới từng học sinh, chỉ STUN). Quiz, slide, bảng viết, PDF, chat AI, điểm số chạy qua Socket.IO nên **không phụ thuộc** cách truyền hình.
+
+| Phương án | Kết luận |
+|---|---|
+| Giữ P2P | Đủ cho lớp ≲10–20 người; mạng chặt cần thêm TURN |
+| **LiveKit** (SFU mã nguồn mở, Cloud hoặc tự chạy) | **Đề xuất.** Giữ mọi tính năng; thay phần phát/nhận hình |
+| Zoom Video SDK | Chỉ khi người dùng có gói Zoom; có "Subsessions" cho phòng nhỏ; giá chưa xác nhận |
+| Zoom Meeting/Apps SDK, Google Meet Add-ons/Media API | **Không phù hợp**: giao diện của họ thay giao diện EngLive; Media API chỉ ở bản xem trước, nhận 3 luồng âm thanh, không có breakout |
+| YouTube Live + quiz EngLive riêng | Chỉ khi lớp rất đông và chỉ xem/làm quiz (trễ vài giây, không phát biểu) |
+
+Kế hoạch nếu người dùng đồng ý (theo thứ tự):
+1. **Lớp trung gian truyền hình** (client): các thao tác chung — vào phòng, phát cam/mic/màn hình, nhận luồng, cấp/thu quyền phát biểu, chia phòng nhỏ, ghi hình. Bản P2P hiện tại (trong `live.js`, `mixer.js`, `breakout.js`) thành bộ thứ nhất; thêm bộ LiveKit; (sau này, nếu có Zoom) bộ Zoom Video SDK. Chọn chế độ trong cài đặt; quiz/slide/bảng viết gọi qua lớp này.
+2. **Máy chủ**: `livekit-server-sdk` tạo token vào phòng (`/api/livekit/token`, kiểm tra quyền thành viên lớp), cập nhật quyền phát của học sinh khi giáo viên cho phép nói; phòng nhỏ = phòng LiveKit riêng cho từng nhóm. Khoá (URL, API key, secret) **chỉ nằm ở server** (biến môi trường hoặc Cài đặt, che khi hiển thị).
+3. Với LiveKit: bỏ nhu cầu `mixer.js` (mỗi người nghe riêng từng track); file nghe/âm thanh hệ thống phát thành track riêng; ghi hình phía máy chủ bằng Egress (muốn có slide thì ghi trang sân khấu bằng web egress hoặc giữ cách tab-capture).
+4. Chi phí chính là **băng thông** (ví dụ 200 học sinh xem video 720p ≈ vài trăm Mbps); giảm bằng chất lượng thấp hơn hoặc chỉ nghe tiếng + xem slide. Camera/micro bắt buộc HTTPS khi lên mạng thật.
+Ước lượng công sức: vài ngày làm việc + kiểm thử với nhiều người thật (chưa đo).
 
 ## Hiệu năng sinh bài (đo với 9Router thật, 2026-10-25)
 | Model | 10 slide | Ghi chú |
@@ -130,7 +154,7 @@ Sinh song song 6 slide (`AI_CONCURRENCY`), mỗi slide tối đa 70 giây (quá 
 2. **Dữ liệu bền**: chuyển JSON → PostgreSQL (hoặc ổ đĩa bền) + sao lưu.
 3. **AI từ xa**: dùng API công khai (Gemini/OpenAI/OpenRouter) với key trong biến môi trường server, hoặc cài 9Router lên cùng VPS. Cần giới hạn chi phí theo người dùng.
 4. **An toàn (bắt buộc trước khi mở cho người lạ)**: xoá tài khoản mẫu `123456`; đăng ký giáo viên phải được duyệt/mã mời; **Cài đặt AI chỉ cho quản trị viên** (hiện mọi giáo viên sửa được và dùng AI bằng key chung); giới hạn thử đăng nhập, hạn phiên đăng nhập; không lưu khoá API trong file dữ liệu.
-5. **Livestream thật**: TURN server hoặc SFU (LiveKit/Cloudflare Calls); P2P hiện chỉ hợp ~10–20 học sinh.
+5. **Livestream thật**: TURN server hoặc SFU; P2P hiện chỉ hợp ~10–20 học sinh. Hướng đã đề xuất: LiveKit (xem mục *Hạ tầng video cho lớp đông*).
 6. **Vận hành**: giám sát lỗi, quyền riêng tư dữ liệu học sinh (có thể là trẻ em), theo dõi chi phí AI.
 Thứ tự đề xuất: test với bạn bè → làm mục 4 và 2 → deploy → chọn nhà cung cấp AI công khai → mở thử một lớp nhỏ → thêm TURN khi cần. Tôi đã đề nghị làm giúp mục 2 và 4; người dùng chưa trả lời.
 
@@ -148,4 +172,7 @@ Thứ tự đề xuất: test với bạn bè → làm mục 4 và 2 → deploy 
 - **2026-10-26** — Viết lại CLAUDE.md và PROJECT.md để phiên sau nắm đủ bối cảnh.
 - **2026-10-26** — Người dùng báo slide theo khuôn cố định và chưa bám file. Sửa như mục "Cải tiến độ bám tài liệu & đa dạng" (chưa commit). Cổng phạm vi khi tạo outline. Người dùng tự chạy `cloudflared` (link tạm mới).
 - **2026-10-26** — Người dùng gửi danh sách chức năng 4 phân hệ và yêu cầu đảm bảo có đủ. Đối chiếu → bảng ở mục "Yêu cầu mở rộng", làm xong Đợt 1 (xem Giai đoạn 7). Đợt 2–3 chưa làm; cần người dùng xác nhận thứ tự nếu muốn đổi.
-- **Việc tiếp theo gợi ý**: (1) duyệt lại trên trình duyệt slide ở sân khấu giáo viên + nút chọn tệp; (2) thử live thật hai máy với camera; (3) hỏi người dùng có muốn push bản Render mới/ làm mục 2 & 4 của lộ trình công khai không; (4) commit file tài liệu nếu người dùng đồng ý.
+- **2026-10-26** — Đợt 2 xong (điền từ, đọc to, phụ đề, bảng viết, PDF, phòng nhỏ); sửa 2 lỗi tìm thấy khi kiểm thử (`data-end` trùng nút Chốt; `window.PdfLive` với `const` toàn cục). Commit `22336d4` rồi push `4002dd9..22336d4` theo yêu cầu người dùng.
+- **2026-10-26** — Người dùng báo: bản ghi chỉ có camera và không lưu được vào lớp → nguyên nhân là server cũ (404) + chưa quay slide; sửa như mục thay đổi chưa commit số 2. Người dùng muốn khung bên phải của giáo viên hiện **slide tiếp theo** thay vì slide hiện tại → làm xong. Người dùng báo lỗi giao diện trang soạn bài (danh sách slide đè biểu mẫu) → sửa CSS.
+- **2026-10-26** — Người dùng hỏi về Google Meet SDK / LiveKit / Zoom SDK để chịu tải cao: đã tra tài liệu, ghi kết luận ở mục *Hạ tầng video cho lớp đông*; người dùng không có gói Zoom; chưa bắt đầu làm LiveKit.
+- **Việc tiếp theo gợi ý**: (1) nhờ người dùng thử ghi hình tab-capture trên Chrome/Edge thật và thử micro/camera thật; (2) hỏi các câu hỏi đang chờ ở đầu file (số học sinh/lớp, LiveKit Cloud hay tự chạy, thứ tự LiveKit ↔ Đợt 3); (3) nếu làm LiveKit: bắt đầu bằng lớp trung gian truyền hình + chế độ LiveKit cho "giáo viên phát, học sinh xem", rồi quyền phát biểu, phòng nhỏ, ghi hình; (4) commit các thay đổi còn lại khi người dùng đồng ý; (5) lộ trình công khai mục 2 và 4 (dữ liệu bền, đăng ký giáo viên cần duyệt, Cài đặt AI chỉ admin).

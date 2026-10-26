@@ -194,9 +194,11 @@
 .test-out.ok { color: var(--mint); } .test-out.err { color: var(--pink); }
 .hint { color: var(--muted); font-size: 13px; font-weight: 500; }
 
+/* Màn hình vừa/nhỏ: danh sách slide thành một dải ngang phía trên, xem trước rồi tới biểu mẫu (không dùng sticky để khỏi đè lên nhau) */
 @media (max-width: 1180px) {
-  .editor { grid-template-columns: 180px minmax(0, 1fr); }
-  .editor .form-panel { grid-column: 1 / -1; position: static; max-height: none; }
+  .editor { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; max-height: none; grid-auto-flow: column; grid-auto-columns: 175px; overflow-x: auto; overflow-y: hidden; padding-bottom: 12px; }
+  .editor .form-panel { position: static; max-height: none; }
 }
 @media (max-width: 760px) {
   .editor { grid-template-columns: 1fr; }
@@ -353,3 +355,20 @@
 .bo-group small { color: #a9a6c9; font-weight: 600; }
 .bo-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
 .bo-tiles .bo-tile { min-height: 90px; }
+
+/* Khung "slide tiếp theo" của giáo viên */
+.lp-next-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 2px 6px; }
+.lp-next-label span { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; color: #ffd68a; }
+.lp-next-label small { color: #a9a6c9; font-weight: 600; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-preview.clickable { cursor: pointer; outline: 2px solid transparent; transition: outline-color .15s; }
+.lp-preview.clickable:hover { outline-color: var(--accent); }
+.lp-last { height: 100%; display: grid; place-content: center; text-align: center; gap: 4px; background: rgba(255, 255, 255, .06); color: #fff; font-size: 34px; }
+.lp-last b { font-size: 16px; } .lp-last small { font-size: 13px; color: #a9a6c9; font-weight: 600; }
+.lp-act .sl-timer span { color: #fff; }
+.lp-act .sl-timer i { background: rgba(255, 255, 255, .15); }
+
+/* Cột danh sách slide: không để dòng "thêm slide" làm tràn ngang */
+.rail { overflow-x: hidden; }
+.rail select, .rail .btn { min-width: 0; }
+.rail > div:last-child { flex-wrap: wrap; }
+@media (max-width: 1180px) { .rail { overflow-x: auto; } .rail > div:last-child { flex-wrap: nowrap; align-items: center; } }

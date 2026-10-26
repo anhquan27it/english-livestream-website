@@ -89,7 +89,8 @@ const LessonLive = (() => {
         <b style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📘 ${esc(state.title)}</b>
         <button class="icon-btn" data-stop title="Dừng chiếu bài giảng" style="color:#a9a6c9"><i data-lucide="square"></i></button>
       </div>
-      <div class="lp-preview" id="lpPrev"></div>
+      <div class="lp-next-label"><span>Slide tiếp theo</span><small>đang chiếu: ${state.index + 1}. ${esc(state.scene.title)}</small></div>
+      <div class="lp-preview" id="lpPrev" title="Bấm để chuyển sang slide này"></div>
       <div class="lp-nav">
         <button data-nav="-1" ${state.index === 0 ? 'disabled' : ''} title="Slide trước (←)"><i data-lucide="chevron-left"></i></button>
         <span class="count">${state.index + 1} / ${state.total}</span>
@@ -97,6 +98,7 @@ const LessonLive = (() => {
       </div>
       <div class="lp-act">
         ${interactive && !act ? `<select class="input" data-secs title="Đếm ngược" style="background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.15)">${[[0, 'Không giới hạn thời gian'], [15, 'Đếm ngược 15 giây'], [30, 'Đếm ngược 30 giây'], [45, 'Đếm ngược 45 giây'], [60, 'Đếm ngược 60 giây'], [90, 'Đếm ngược 90 giây'], [120, 'Đếm ngược 2 phút']].map(([v, l]) => `<option value="${v}" ${v === actSecs ? 'selected' : ''} style="color:#000">${l}</option>`).join('')}</select><button class="btn btn-accent" data-start><i data-lucide="play"></i> Bắt đầu hoạt động</button>` : ''}
+        ${open && act.localEnds ? `<div class="sl-timer" data-deadline="${act.localEnds}" data-dur="${act.durationMs}"><span>⏱ <b></b></span><i><em></em></i></div>` : ''}
         ${open ? `<div class="lp-stat">📝 ${act.stats.answered} học sinh đã trả lời</div><button class="btn btn-live" data-end><i data-lucide="flag"></i> Chốt &amp; xem kết quả</button>` : ''}
         ${ended ? `<div class="lp-stat">✅ Đã chốt · ${act.result.answered}/${act.result.viewers} học sinh tham gia</div>` : ''}
         ${!interactive ? '<div class="lp-stat" style="font-weight:600;color:#a9a6c9">Slide nội dung — bấm → để tiếp tục</div>' : ''}
@@ -107,7 +109,14 @@ const LessonLive = (() => {
       <div class="panel-heading">Danh sách slide</div>
       <div class="lp-list">${state.outline.map((s, i) => `<button data-go="${i}" class="${i === state.index ? 'active' : ''}"><i>${i + 1}</i><span>${esc(s.title)}</span><em>${Slides.TAGS[s.type] || 'Slide'}</em></button>`).join('')}</div>`;
     icons();
-    Slides.render(document.getElementById('lpPrev'), { scene: state.scene, full: sc, activity: act, role: 'teacher', local: {}, handlers: {} });
+    const prev = document.getElementById('lpPrev');
+    if (state.nextScene) {
+      Slides.render(prev, { scene: state.nextScene, role: 'view', activity: null, local: {}, handlers: {} });
+      prev.classList.add('clickable');
+      prev.onclick = () => go(state.index + 1);
+    } else {
+      prev.innerHTML = '<div class="lp-last">🏁<b>Đây là slide cuối</b><small>Hết bài giảng</small></div>';
+    }
     Slides.render(o.layer, { scene: state.scene, full: sc, activity: act, role: 'teacher', local: {}, handlers: {} });
     p.querySelector('[data-stop]').onclick = () => o.socket.emit('lesson:stop');
     p.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => go(state.index + +b.dataset.nav)));

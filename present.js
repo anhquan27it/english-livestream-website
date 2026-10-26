@@ -49,6 +49,7 @@ function init({ io, lives }) {
     }
     if (teacher) {
       st.fullScene = sc;
+      st.nextScene = les.scenes[live.slideIndex + 1] || null;
       st.outline = les.scenes.map((x) => ({ id: x.id, type: x.type, title: x.title }));
     }
     return st;

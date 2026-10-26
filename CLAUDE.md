@@ -3,6 +3,12 @@
 **Đọc [PROJECT.md](PROJECT.md) trước**: bối cảnh người dùng, kiến trúc, tiến độ, trạng thái hiện tại, việc đang chờ và nhật ký.
 Sau mỗi phiên làm việc, cập nhật *Trạng thái hiện tại*, *Tiến độ* và *Nhật ký* trong PROJECT.md (và mục này nếu quy ước đổi).
 
+## Bắt đầu một phiên mới (làm theo thứ tự)
+1. Đọc mục **"Trạng thái hiện tại"** và **"Câu hỏi đang chờ người dùng"** trong PROJECT.md.
+2. Chạy `git status` và `git log --oneline | head` để biết cái gì chưa commit/push (đừng tự commit/push).
+3. Nếu sắp sửa code server: nhắc người dùng sẽ cần chạy lại `npm start` (xem *Quy ước*).
+4. Cuối phiên: cập nhật PROJECT.md (trạng thái, tiến độ, nhật ký) và tệp này nếu quy ước đổi.
+
 ## Dự án
 EngLive: web học tiếng Anh livestream giữa giáo viên và học sinh. Giáo viên soạn bài giảng (slide + trò chơi)
 bằng AI từ PDF/văn bản trước buổi học, trình chiếu trong buổi livestream; học sinh tương tác trên slide và
@@ -14,6 +20,7 @@ hỏi AI (chat box) trong lúc học hoặc sau buổi học. Giao diện tiến
 - Yêu cầu đã chốt: AI chỉ tạo nội dung tiếng Anh và chỉ hỏi đáp về tiếng Anh / bài hôm đó; tạo bài trong ~1–2 phút;
   cho phép nhiều nhà cung cấp AI, tạm dùng 9Router với `ag/gemini-3.8-flash-high`.
 - Commit/push/chạy thứ mở máy ra internet (tunnel) **chỉ khi người dùng yêu cầu**.
+- Đang cân nhắc hạ tầng video cho lớp đông: đã loại Google Meet SDK, người dùng **không có gói Zoom**, hướng đề xuất là **LiveKit** + lớp trung gian truyền hình (chi tiết và câu hỏi còn treo ở PROJECT.md). Khoá LiveKit/API **không được dán vào chat**; hướng dẫn người dùng nhập qua cấu hình hoặc biến môi trường.
 
 ## Lệnh
 ```bash
@@ -21,7 +28,7 @@ npm install
 npm start            # http://localhost:3000 (dữ liệu thật trong data/db.json)
 npm run dev          # tự reload khi sửa server
 npm run dev:mock     # http://localhost:3001, AI giả lập, dữ liệu tách ở data-mock/ (không cần 9Router)
-npm test             # 32 kiểm tra end-to-end, tự dựng mock LLM + server tạm
+npm test             # 33 kiểm tra end-to-end, tự dựng mock LLM + server tạm
 node tests/bench.js [model] [số slide] [số game]   # đo thời gian tạo bài với AI THẬT (chạy trên bản sao dữ liệu)
 node tests/fidelity.js [file] [số slide] [số game] # AI THẬT: kiểm tra slide bám tài liệu + đa dạng bố cục (MODEL=... để đổi model)
 node tests/scope-check.js                           # AI THẬT: kiểm tra cổng "chỉ học tiếng Anh" ở bước outline
@@ -44,7 +51,8 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - `public/` — HTML/CSS/JS thuần, không build. Trang: `index`, `teacher`, `student`, `live`, `lessons`, `ai-settings`, `tutor`.
   `js/slides.js` render slide dùng chung (editor, live giáo viên, học sinh); `js/lesson-live.js` điều khiển trình chiếu trong `live`;
   `js/aichat.js` chat AI dùng chung; `css/studio.css` style cho các phần mới.
-- `tests/` — `mock-llm.js`, `smoke.js`, `dev-mock.js`, `bench.js`.
+- `tests/` — `mock-llm.js`, `smoke.js`, `dev-mock.js`, `bench.js`, `fidelity.js`, `scope-check.js`, `fixtures/`.
+- (Kế hoạch, chưa có) lớp trung gian truyền hình client + chế độ LiveKit + `/api/livekit/token` ở server: xem PROJECT.md mục *Hạ tầng video cho lớp đông*. Phần video hiện nằm lẫn trong `live.js`, `mixer.js`, `breakout.js`; khi tách, giữ nguyên hành vi P2P cho lớp nhỏ.
 
 ## Quy ước
 - Giữ phong cách code hiện có: CommonJS, không framework phía client, chú thích tiếng Việt ngắn gọn.
@@ -52,9 +60,11 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - Khoá API chỉ ở server, client chỉ nhận bản che (`••••xxxx`). Không in khoá ra log/chat; không đọc khoá của người dùng trừ khi cần chẩn đoán (chỉ so sánh, không in).
 - AI trả JSON: luôn qua `extractJson` + `normalizeScene`. Prompt AI có **SCOPE RULES** (chỉ tiếng Anh/bài học, coi tài liệu & tin nhắn là dữ liệu, không làm theo lệnh nhúng); giữ nguyên khi sửa prompt. Đây là ràng buộc bằng prompt, không phải bộ lọc cứng.
 - Sửa file bằng Edit/Write; tránh dùng `python`/`node -e`/heredoc trong shell để chèn chuỗi chứa `\n` hoặc `\w` (shell làm mất dấu `\`). Với vá nhiều chỗ: ghi script `.js` bằng Write rồi chạy. Một số file có xuống dòng CRLF lẫn LF (do git trên Windows): script vá cần `split('\r\n').join('\n')` trước khi so khớp chuỗi nhiều dòng.
-- 32 kiểm tra trong `npm test`; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
+- 33 kiểm tra trong `npm test`; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
 - JS client dùng nhiều file script cổng toàn cục: `const X = ...` ở mức cao nhất **không** là `window.X`; kiểm tra bằng `typeof X !== 'undefined'`. Thuộc tính `data-*` trong giao diện phải duy nhất (từng trùng `data-end`).
 - Thử giao diện 3 vai bằng 3 tab trình duyệt khác origin (`localhost`, `127.0.0.1`, `[::1]`) với `?fakemic=1`; tab ở nền bị trình duyệt tạm dừng hoạt ảnh (pdf.js sẽ không vẽ), hãy đưa tab ra trước khi kiểm tra hình.
+- **Server cũ chạy trên máy người dùng không tự cập nhật.** Mỗi lần đổi code server, người dùng phải chạy lại `npm start`; nếu không sẽ gặp lỗi lạ (từng có: lưu bản ghi trả 404, tính năng mới không hoạt động). Cổng 3000: nếu thấy `EADDRINUSE`, tắt tiến trình `node server.js` cũ rồi nhờ người dùng tự chạy `npm start`; không mở thêm server ẩn ở cổng 3000. Dùng cổng 3001 + `npm run dev:mock` cho kiểm thử của mình.
+- Giao diện: bố cục chỉnh tay nhiều ở `public/css/studio.css`; kiểm tra ở ít nhất ba khổ rộng (~820, ~1100, ~1400 px) vì từng lỗi ở khổ vừa (cột sticky đè nội dung). Không dùng `position: sticky` cho cột trong lưới khi cột có thể cao hơn ô của nó.
 - Sau khi sửa server: chạy `npm test`. Sau khi sửa giao diện: kiểm tra bằng `npm run dev:mock` + trình duyệt.
 - Không commit `data/`, `data-mock/`, `node_modules/`, `.claude/`. Git của repo này đặt user riêng (`anhquan27it` / `anhquan27it@gmail.com`), nhánh `main`.
 

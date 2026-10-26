@@ -46,12 +46,12 @@ Quy trình mượn ý tưởng từ [OpenMAIC](https://github.com/THU-MAIC/OpenM
    (chạy nền trên máy chủ). Mỗi slide sửa được bằng form, hoặc bấm *Sinh lại* kèm yêu cầu riêng. Loại slide: nội dung (kèm từ vựng + phát âm),
    trắc nghiệm, bình chọn, ghép cặp, xếp từ thành câu. Tự lưu.
 3. **Livestream**: bấm *Livestream bài này* (hoặc vào phòng live → tab *Bài giảng*). Học sinh thấy slide, video giáo viên thu nhỏ ở góc.
-   Giáo viên chuyển slide (phím ←/→), *Bắt đầu hoạt động* → học sinh bấm trả lời → *Chốt* để công bố đáp án, điểm, bảng xếp hạng.
+   Giáo viên chuyển slide (phím ←/→; khung bên phải luôn hiện **slide tiếp theo**, bấm vào để chuyển), *Bắt đầu hoạt động* → học sinh bấm trả lời → *Chốt* để công bố đáp án, điểm, bảng xếp hạng.
 4. **Chat AI**: học sinh có tab *AI* ngay trong phòng live (AI biết slide đang chiếu, không lộ đáp án hoạt động chưa chốt)
    và trang *Hỏi đáp AI* để hỏi về bài giảng đã học sau buổi học. Lịch sử được lưu theo từng bài.
 
 5. **Công cụ dạy nói/nghe/viết trong buổi live**: học sinh phát biểu bằng mic khi giáo viên cho phép (giọng được trộn phát lại cho cả lớp), phát file nghe và âm thanh hệ thống,
-   ghi hình buổi học để xem lại, chia **phòng thảo luận nhỏ** (nhóm 2–5 người, giáo viên đi tuần), **bảng viết** cộng tác với tô màu sửa lỗi trực tiếp, chiếu **PDF**, **phụ đề trực tiếp**,
+   ghi hình buổi học để xem lại (Chrome/Edge: chọn tab EngLive khi trình duyệt hỏi để bản ghi có cả slide; nếu không, chỉ ghi camera), chia **phòng thảo luận nhỏ** (nhóm 2–5 người, giáo viên đi tuần), **bảng viết** cộng tác với tô màu sửa lỗi trực tiếp, chiếu **PDF**, **phụ đề trực tiếp**,
    trò chơi **điền từ** và **đọc to** (chấm phát âm), reactions, tặng sao, đếm ngược. Nhận dạng giọng nói (phụ đề, đọc to) cần Chrome hoặc Edge.
 
 Thử giao diện không cần 9Router: `npm run dev:mock` (http://localhost:3001, AI giả lập). Kiểm thử tự động: `npm test`.
@@ -93,6 +93,12 @@ Nếu tạo Web Service thủ công, chọn repository này, runtime **Node**, b
 
 Tham khảo: [Render Node.js](https://render.com/docs/deploy-node-express-app),
 [giới hạn gói Free](https://render.com/docs/free).
+
+## Kế hoạch tiếp theo
+
+- **Lớp đông (trên ~20 học sinh)**: chuyển phần truyền video sang máy chủ chuyển tiếp **LiveKit** (giữ nguyên quiz, slide, bảng viết, chat AI; bản P2P vẫn dùng cho lớp nhỏ). Chưa làm, xem [PROJECT.md](PROJECT.md).
+- **Quản lý nhiều lớp**: Admin, trợ giảng, thời khoá biểu, nhắc lịch qua email/push.
+- **Công khai**: dữ liệu bền (PostgreSQL), đăng ký giáo viên cần duyệt, Cài đặt AI chỉ dành cho quản trị viên.
 
 ## Kỹ thuật
 

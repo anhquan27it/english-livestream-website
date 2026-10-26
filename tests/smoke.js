@@ -183,6 +183,20 @@ async function main() {
     assert.equal(st.scene.type, 'slide');
     assert.equal((await emit(ss, 'lesson:present', { lessonId })).error !== undefined, true, 'học sinh không được điều khiển');
   });
+  await test('giáo viên thấy trước slide tiếp theo (đầy đủ); học sinh không nhận nội dung slide sau', async () => {
+    const tGot = nextEvent(ts, 'lesson:state', (s) => s && s.index === 1);
+    const sGot = nextEvent(ss, 'lesson:state', (s) => s && s.index === 1);
+    ts.emit('slide:goto', { index: 1 });
+    const [tst, sst] = [await tGot, await sGot];
+    assert.equal(tst.nextScene.id, scenes[2].id);
+    assert.ok(!('nextScene' in sst) && !JSON.stringify(sst).includes(scenes[2].id), 'học sinh không nhận slide sau');
+    const last = nextEvent(ts, 'lesson:state', (s) => s && s.index === 5);
+    ts.emit('slide:goto', { index: 5 });
+    assert.equal((await last).nextScene, null, 'slide cuối không có slide tiếp theo');
+    const back = nextEvent(ts, 'lesson:state', (s) => s && s.index === 0);
+    ts.emit('slide:goto', { index: 0 });
+    await back;
+  });
   await test('chat AI trong buổi live biết slide hiện tại và KHÔNG lộ đáp án quiz chưa chốt', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is luggage?' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
