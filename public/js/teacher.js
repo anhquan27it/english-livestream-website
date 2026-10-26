@@ -89,6 +89,7 @@ function renderDetail() {
             ? `<button class="btn btn-live" data-act="enter"><i data-lucide="radio"></i> Vào phòng live</button>
                <button class="btn btn-outline" data-act="end"><i data-lucide="square"></i> Kết thúc</button>`
             : `<button class="btn btn-live" data-act="live"><i data-lucide="video"></i> Bắt đầu livestream</button>`}
+          <button class="btn btn-outline" data-act="recs"><i data-lucide="film"></i> Bản ghi</button>
           <button class="icon-btn" data-act="delete" title="Xoá lớp"><i data-lucide="trash-2"></i></button>
         </div>
       </div>
@@ -166,6 +167,7 @@ function renderDetail() {
   }));
   el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async () => {
     const act = b.dataset.act;
+    if (act === 'recs') openRecordings(c.id, true);
     if (act === 'live') startLive(c.id);
     if (act === 'enter') location.href = `/live.html?class=${c.id}`;
     if (act === 'end') {

@@ -22,6 +22,7 @@
           </div>
         </div>
         <div class="right">
+          <span class="badge-dark" id="speakerBadge" hidden style="background:rgba(18,185,129,.35)"></span>
           <span class="badge-live" id="liveBadge" hidden>LIVE</span>
           <span class="badge-dark" id="timer"><i data-lucide="clock"></i> 00:00</span>
           <span class="badge-dark"><i data-lucide="eye"></i> <span id="viewerCount">0</span></span>
@@ -31,6 +32,8 @@
       <div class="stage" id="stage">
         <video id="video" playsinline autoplay></video>
         <div class="slide-layer" id="slideLayer"></div>
+        <div id="reactLayer"></div>
+        <div id="captions" hidden></div>
         <button class="btn btn-sm btn-outline swap-btn" id="swapBtn" title="Đổi vị trí video và slide"><i data-lucide="repeat-2"></i> Đổi khung</button>
         <div class="word-overlay" id="wordOverlay" hidden></div>
         <div class="stage-state" id="stageState">
@@ -45,12 +48,16 @@
       <div class="panel-tabs">
         <button class="active" data-panel="chat"><i data-lucide="message-circle"></i> Chat</button>
         <button data-panel="lesson" id="tabLesson" hidden><i data-lucide="presentation"></i> Bài giảng</button>
+        <button data-panel="breakout" id="tabBo" hidden><i data-lucide="users-round"></i> Nhóm</button>
+        <button data-panel="pad" id="tabPad" hidden><i data-lucide="pen-line"></i> Viết</button>
         <button data-panel="ai" id="tabAi" hidden><i data-lucide="bot"></i> AI</button>
         <button data-panel="people"><i data-lucide="users"></i> <span id="peopleLabel">Học sinh</span> <span class="count" id="peopleCount">0</span></button>
       </div>
       <div class="panel-body" id="chatPanel"><div class="chat-list" id="chatList"></div></div>
       <div class="panel-body" id="peoplePanel" hidden></div>
       <div class="panel-body" id="lessonPanel" hidden></div>
+      <div class="panel-body" id="boPanel" hidden></div>
+      <div class="panel-body" id="padPanel" hidden></div>
       <div class="panel-body" id="aiPanel" hidden style="padding:0"></div>
       <div id="chatBox">
         <div class="quick" id="quick"></div>
@@ -65,9 +72,15 @@
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="/js/vendor/fix-webm-duration.js"></script>
+  <script src="/js/mixer.js"></script>
   <script src="/js/slides.js"></script>
   <script src="/js/aichat.js"></script>
   <script src="/js/lesson-live.js"></script>
+  <script src="/js/pad.js"></script>
+  <script src="/js/pdf-live.js"></script>
+  <script src="/js/breakout.js"></script>
   <script src="/js/live.js"></script>
 </body>
 </html>

@@ -50,6 +50,10 @@ Quy trình mượn ý tưởng từ [OpenMAIC](https://github.com/THU-MAIC/OpenM
 4. **Chat AI**: học sinh có tab *AI* ngay trong phòng live (AI biết slide đang chiếu, không lộ đáp án hoạt động chưa chốt)
    và trang *Hỏi đáp AI* để hỏi về bài giảng đã học sau buổi học. Lịch sử được lưu theo từng bài.
 
+5. **Công cụ dạy nói/nghe/viết trong buổi live**: học sinh phát biểu bằng mic khi giáo viên cho phép (giọng được trộn phát lại cho cả lớp), phát file nghe và âm thanh hệ thống,
+   ghi hình buổi học để xem lại, chia **phòng thảo luận nhỏ** (nhóm 2–5 người, giáo viên đi tuần), **bảng viết** cộng tác với tô màu sửa lỗi trực tiếp, chiếu **PDF**, **phụ đề trực tiếp**,
+   trò chơi **điền từ** và **đọc to** (chấm phát âm), reactions, tặng sao, đếm ngược. Nhận dạng giọng nói (phụ đề, đọc to) cần Chrome hoặc Edge.
+
 Thử giao diện không cần 9Router: `npm run dev:mock` (http://localhost:3001, AI giả lập). Kiểm thử tự động: `npm test`.
 Kế hoạch và tiến độ chi tiết: [PROJECT.md](PROJECT.md).
 

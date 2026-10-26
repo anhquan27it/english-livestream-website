@@ -6,6 +6,17 @@ const LessonLive = (() => {
   let localKey = '';
   let onChange = () => {};
 
+  // Đếm ngược: cập nhật mọi thanh .sl-timer trên trang mỗi 250ms
+  setInterval(() => {
+    document.querySelectorAll('.sl-timer').forEach((el) => {
+      const left = Math.max(0, +el.dataset.deadline - Date.now());
+      el.querySelector('b').textContent = Math.ceil(left / 1000) + 's';
+      el.querySelector('em').style.width = Math.min(100, (left / (+el.dataset.dur || 1)) * 100) + '%';
+      el.classList.toggle('low', left < 6000);
+    });
+  }, 250);
+
+  let actSecs = 0; // thời gian đếm ngược giáo viên đã chọn (giây, 0 = không giới hạn)
   let statsBound = false;
   // init gọi hai lần: lần đầu dựng giao diện, lần sau (khi đã có socket) đăng ký sự kiện
   function init(opts) {
@@ -30,6 +41,7 @@ const LessonLive = (() => {
   function apply(st) {
     const before = state && state.id;
     state = st;
+    if (st && st.activity && st.activity.endsInMs != null) st.activity.localEnds = Date.now() + st.activity.endsInMs;
     const key = st ? st.scene.id + ':' + (st.activity ? st.activity.startedAt : '') : '';
     if (key !== localKey) { local = {}; localKey = key; }
     if (o.isTeacher) paintTeacher(); else paintStudent();
@@ -38,6 +50,7 @@ const LessonLive = (() => {
 
   // ----- Học sinh -----
   function paintStudent() {
+    if (typeof PdfLive !== 'undefined' && PdfLive.active) return; // đang chiếu PDF: PdfLive quản lý khung này
     o.stage.classList.toggle('with-slide', !!state);
     if (!state) { o.layer.innerHTML = ''; o.stage.classList.remove('swap'); return; }
     Slides.render(o.layer, {
@@ -62,6 +75,7 @@ const LessonLive = (() => {
 
   async function paintTeacher() {
     const p = o.panel;
+    if (typeof PdfLive !== 'undefined' && PdfLive.active) return PdfLive.paintPanel(p);
     // Sân khấu của giáo viên cũng hiển thị slide (video của mình thu nhỏ ở góc, bấm "Đổi khung" để đảo)
     o.stage.classList.toggle('with-slide', !!state);
     if (!state) { o.layer.innerHTML = ''; o.stage.classList.remove('swap'); return paintPicker(p); }
@@ -82,7 +96,7 @@ const LessonLive = (() => {
         <button data-nav="1" ${state.index === state.total - 1 ? 'disabled' : ''} title="Slide sau (→)"><i data-lucide="chevron-right"></i></button>
       </div>
       <div class="lp-act">
-        ${interactive && !act ? `<button class="btn btn-accent" data-start><i data-lucide="play"></i> Bắt đầu hoạt động</button>` : ''}
+        ${interactive && !act ? `<select class="input" data-secs title="Đếm ngược" style="background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.15)">${[[0, 'Không giới hạn thời gian'], [15, 'Đếm ngược 15 giây'], [30, 'Đếm ngược 30 giây'], [45, 'Đếm ngược 45 giây'], [60, 'Đếm ngược 60 giây'], [90, 'Đếm ngược 90 giây'], [120, 'Đếm ngược 2 phút']].map(([v, l]) => `<option value="${v}" ${v === actSecs ? 'selected' : ''} style="color:#000">${l}</option>`).join('')}</select><button class="btn btn-accent" data-start><i data-lucide="play"></i> Bắt đầu hoạt động</button>` : ''}
         ${open ? `<div class="lp-stat">📝 ${act.stats.answered} học sinh đã trả lời</div><button class="btn btn-live" data-end><i data-lucide="flag"></i> Chốt &amp; xem kết quả</button>` : ''}
         ${ended ? `<div class="lp-stat">✅ Đã chốt · ${act.result.answered}/${act.result.viewers} học sinh tham gia</div>` : ''}
         ${!interactive ? '<div class="lp-stat" style="font-weight:600;color:#a9a6c9">Slide nội dung — bấm → để tiếp tục</div>' : ''}
@@ -98,7 +112,8 @@ const LessonLive = (() => {
     p.querySelector('[data-stop]').onclick = () => o.socket.emit('lesson:stop');
     p.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => go(state.index + +b.dataset.nav)));
     p.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(+b.dataset.go)));
-    const st = p.querySelector('[data-start]'); if (st) st.onclick = () => o.socket.emit('activity:start');
+    const sel = p.querySelector('[data-secs]'); if (sel) sel.onchange = () => (actSecs = +sel.value);
+    const st = p.querySelector('[data-start]'); if (st) st.onclick = () => o.socket.emit('activity:start', { seconds: actSecs });
     const en = p.querySelector('[data-end]'); if (en) en.onclick = () => o.socket.emit('activity:end');
   }
 
@@ -109,12 +124,14 @@ const LessonLive = (() => {
     p.innerHTML = '<div class="empty" style="color:#8885ab">Đang tải bài giảng…</div>';
     try {
       const d = await api('/api/lessons');
-      if (state) { pickerLoading = false; return; } // trong lúc tải, giáo viên đã bắt đầu chiếu bài khác
+      if (state || (typeof PdfLive !== 'undefined' && PdfLive.active)) { pickerLoading = false; return; } // trong lúc tải, giáo viên đã bắt đầu chiếu bài/PDF khác
       const ready = d.lessons.filter((l) => l.sceneCount).sort((a, b) => (b.classIds.includes(o.classId) ? 1 : 0) - (a.classIds.includes(o.classId) ? 1 : 0));
       p.innerHTML = `<div class="panel-heading">Chọn bài giảng để chiếu</div>
         <div class="lp-pick">${ready.map((l) => `<button class="lp-lesson" data-pick="${l.id}"><span style="font-size:24px">📘</span><span style="flex:1;min-width:0"><b>${esc(l.title)}</b><small>${l.sceneCount} slide · ${esc(l.level)}${l.classIds.includes(o.classId) ? ' · đã gắn lớp này' : ''}</small></span><i data-lucide="play"></i></button>`).join('')
           || '<div class="empty" style="color:#8885ab"><div class="emoji">📝</div><b style="color:#fff">Chưa có bài giảng nào</b>Hãy soạn bài giảng bằng AI trước buổi học.</div>'}</div>
         <a class="btn btn-outline btn-block" style="margin-top:12px;background:transparent;color:#fff;border-color:rgba(255,255,255,.2)" href="/lessons.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Soạn bài giảng mới</a>`;
+      p.insertAdjacentHTML('beforeend', '<div id="pdfPick" style="margin-top:14px"></div>');
+      if (typeof PdfLive !== 'undefined') PdfLive.mountPicker(p.querySelector('#pdfPick'));
       icons();
       p.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => present(b.dataset.pick)));
     } catch (e) {
@@ -130,5 +147,8 @@ const LessonLive = (() => {
     });
   }
 
-  return { init, apply, present, get state() { return state; } };
+  // Vẽ lại theo trạng thái hiện tại (PdfLive gọi sau khi dừng chiếu PDF)
+  function refresh() { if (o.isTeacher) paintTeacher(); else paintStudent(); }
+
+  return { init, apply, present, refresh, get state() { return state; } };
 })();

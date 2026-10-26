@@ -78,6 +78,7 @@ function render() {
           ${c.status === 'pending'
             ? '<span class="chip chip-warn"><i data-lucide="clock"></i> Chờ giáo viên duyệt</span>'
             : `<span class="chip chip-ok"><i data-lucide="check"></i> Đã học ${c.attended}/${c.sessions} buổi</span>`}
+          ${c.status === 'member' ? `<button class="icon-btn" data-rec="${c.id}" title="Xem lại buổi học đã ghi hình"><i data-lucide="film"></i></button>` : ''}
           ${c.live
             ? `<a class="btn btn-live btn-sm" href="/live.html?class=${c.id}"><i data-lucide="play"></i> Vào học</a>`
             : c.status === 'member' ? `<a class="btn btn-outline btn-sm" href="/tutor.html?class=${c.id}"><i data-lucide="bot"></i> Hỏi AI</a>` : ''}
@@ -86,6 +87,7 @@ function render() {
     </article>`).join('') : `
     <div class="card empty" style="grid-column:1/-1"><div class="emoji">🎒</div><b>Bạn chưa tham gia lớp nào</b>Hỏi giáo viên mã lớp và nhập để xin vào lớp nhé.<br /><br />
     <button class="btn btn-primary" onclick="joinClass()"><i data-lucide="key-round"></i> Nhập mã lớp</button></div>`;
+  document.querySelectorAll('[data-rec]').forEach((b) => (b.onclick = () => openRecordings(b.dataset.rec, false)));
   icons();
 }
 

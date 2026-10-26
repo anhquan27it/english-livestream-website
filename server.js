@@ -7,6 +7,11 @@ const store = require('./db');
 const lessons = require('./lessons');
 const presentMod = require('./present');
 const aiRoutes = require('./aiRoutes');
+const interactMod = require('./interact');
+const recordings = require('./recordings');
+const writingMod = require('./writing');
+const pdfshareMod = require('./pdfshare');
+const breakoutMod = require('./breakout');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +28,9 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 // Thêm: lesson (bản chụp bài giảng đang chiếu), slideIndex, activity (hoạt động đang mở), scores (điểm theo học sinh) - xem present.js
 const lives = new Map();
 const present = presentMod.init({ io, lives });
+const interact = interactMod.init({ io, lives, present });
+const writing = writingMod.init({ io, lives });
+const breakout = breakoutMod.init({ io, lives });
 
 // ---------- Helpers ----------
 const db = () => store.data;
@@ -134,6 +142,9 @@ app.get('/api/me', auth(), (req, res) => res.json({ user: publicUser(req.user) }
 lessons.recoverJobs();
 app.use(lessons.createRouter({ auth, findClass }));
 app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive }));
+app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
+const pdfshare = pdfshareMod.init({ io, lives, auth, findClass, canAccess: canAccessLive, present });
+app.use(pdfshare.router);
 
 // ---------- Lớp học ----------
 app.get('/api/classes', auth(), (req, res) => {
@@ -263,7 +274,7 @@ app.post('/api/classes/:id/live', auth('teacher'), (req, res) => {
   if (!c) return;
   if (!lives.has(c.id)) {
     const title = String((req.body || {}).title || '').trim() || 'Buổi học trực tiếp';
-    lives.set(c.id, { title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map() });
+    lives.set(c.id, { title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map(), speaker: null, pad: null, pdf: null, breakout: null });
     notifyClass(c);
   }
   res.json({ live: liveInfo(c.id) });
@@ -280,6 +291,7 @@ function endLive(c, reason) {
   const live = lives.get(c.id);
   if (!live) return;
   present.endActivity(live);
+  breakout.end(live, c.id, 'Buổi học đã kết thúc.');
   c.history.unshift({
     title: live.title,
     startedAt: live.startedAt,
@@ -314,6 +326,8 @@ function removeViewer(classId, socketId) {
   const live = lives.get(classId);
   if (!live || !live.viewers.has(socketId)) return;
   live.viewers.delete(socketId);
+  interact.onViewerGone(live, classId, socketId);
+  breakout.onViewerGone(live, classId, socketId);
   if (live.teacherSocket) io.to(live.teacherSocket).emit('viewer:left', { socketId });
   io.to('live:' + classId).emit('viewers:count', live.viewers.size);
   const c = findClass(classId);
@@ -354,6 +368,10 @@ io.on('connection', (socket) => {
         live: liveInfo(classId),
         word: live.word,
         lesson: present.stateFor(live, { teacher: true }),
+        speaker: interact.speakerInfo(live),
+        pad: writing.stateFor(live, { teacher: true }),
+        pdf: live.pdf,
+        breakout: breakout.teacherState(live),
         viewers: [...live.viewers].map(([sid, v]) => ({ socketId: sid, ...v })),
       });
     }
@@ -373,10 +391,14 @@ io.on('connection', (socket) => {
     io.to('live:' + classId).emit('viewers:count', live.viewers.size);
     socket.to('live:' + classId).emit('chat', { system: true, text: `${user.name} đã tham gia lớp học`, at: Date.now() });
     notifyClass(c);
-    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }) });
+    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }), speaker: interact.speakerInfo(live), pad: writing.stateFor(live, { userId: user.id }), pdf: live.pdf });
   });
 
   present.attach(socket);
+  interact.attach(socket);
+  writing.attach(socket);
+  pdfshare.attach(socket);
+  breakout.attach(socket);
 
   // Chuyển tiếp offer/answer/ICE giữa giáo viên và học sinh trong cùng phòng
   socket.on('signal', ({ to, data }) => {
@@ -445,6 +467,7 @@ io.on('connection', (socket) => {
     socket.leave('live:' + classId);
     if (live.teacherSocket === socket.id) {
       live.teacherSocket = null;
+      interact.setSpeaker(live, classId, null);
       io.to('live:' + classId).emit('teacher:left');
       const c = findClass(classId);
       if (c) notifyClass(c);

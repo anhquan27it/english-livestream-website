@@ -2,14 +2,21 @@
 // Chạy riêng: node tests/mock-llm.js [port]   (mặc định 20199)
 const http = require('http');
 
+const LAYOUTS = ['bullets', 'rule', 'table', 'dialogue', 'passage'];
 const TITLES = ['Warm-up', 'Key vocabulary', 'Grammar focus', 'Practice', 'Dialogue', 'Recap'];
 
-function sceneJson(type, title) {
+function sceneJson(type, title, layout, excerpt) {
   if (type === 'quiz') return { title, question: `Which word means "đi du lịch"? (${title})`, options: ['travel', 'cook', 'sleep', 'paint'], answer: 0, explanation: '"travel" nghĩa là đi du lịch.', note: 'Hỏi cả lớp trước khi chốt.' };
   if (type === 'poll') return { title, question: 'Where do you want to travel next?', options: ['Japan', 'France', 'Vietnam'], note: 'Mở đầu thân thiện.' };
   if (type === 'match') return { title, instruction: 'Match the words with their meanings.', pairs: [{ left: 'airport', right: 'sân bay' }, { left: 'ticket', right: 'vé' }, { left: 'luggage', right: 'hành lý' }, { left: 'passport', right: 'hộ chiếu' }], note: 'Cho 1 phút.' };
+  if (type === 'fill') return { title, sentence: 'I ___ to Japan last year.', answers: [['went']], hint: 'go', note: 'Điền từ.' };
+  if (type === 'speak') return { title, sentence: 'Where is the departure gate?', translation: 'Cổng khởi hành ở đâu?', note: 'Đọc to.' };
   if (type === 'order') return { title, sentence: 'I am going to travel to Japan.', translation: 'Tôi sắp đi du lịch Nhật Bản.', note: 'Gợi ý cấu trúc be going to.' };
-  return { title, emoji: '✈️', bullets: ['Travel makes us curious.', 'We book tickets online.', 'Pack light for short trips.'], vocab: [{ word: 'luggage', ipa: '/ˈlʌɡ.ɪdʒ/', meaning: 'hành lý', example: 'My luggage is heavy.' }], note: 'Giới thiệu chủ đề trong 2 phút.' };
+  if (layout === 'rule') return { title, emoji: '📐', layout, rule: { name: 'Past Simple', formula: 'Subject + V2', explanation: 'Dùng cho hành động đã xong.', examples: ['I travelled to Japan.'] }, bullets: ['Use V2 for regular and irregular verbs.'], note: `Giải thích công thức. [excerpt:${excerpt}]` };
+  if (layout === 'table') return { title, emoji: '📊', layout, table: { headers: ['Verb', 'Past'], rows: [['go', 'went'], ['buy', 'bought']] }, note: `Đọc bảng. [excerpt:${excerpt}]` };
+  if (layout === 'dialogue') return { title, emoji: '💬', layout, dialogue: [{ speaker: 'A', text: 'Where is your luggage?' }, { speaker: 'B', text: 'It is at the gate.' }], note: `Đóng vai. [excerpt:${excerpt}]` };
+  if (layout === 'passage') return { title, emoji: '📖', layout, passage: 'I booked a **ticket** to Japan. The **airport** was busy.', vocab: [{ word: 'ticket', ipa: '/ˈtɪk.ɪt/', meaning: 'vé', example: 'I have a ticket.' }], note: `Đọc cả lớp. [excerpt:${excerpt}]` };
+  return { title, emoji: '✈️', layout: layout || 'bullets', bullets: ['Travel makes us curious.', 'We book tickets online.', 'Pack light for short trips.'], vocab: [{ word: 'luggage', ipa: '/ˈlʌɡ.ɪdʒ/', meaning: 'hành lý', example: 'My luggage is heavy.' }], note: `Giới thiệu chủ đề trong 2 phút. [excerpt:${excerpt}]` };
 }
 
 function reply(messages) {
@@ -23,15 +30,17 @@ function reply(messages) {
     const scenes = [];
     for (let i = 0; i < total; i++) {
       const isInter = i > 0 && i < total - 1 && (i % 2 === 0) && scenes.filter((s) => s.type !== 'slide').length < inter;
-      scenes.push({ type: isInter ? kinds[scenes.length % kinds.length] : 'slide', title: `${TITLES[i % TITLES.length]} ${i + 1}`, goal: 'Teach or test the topic.' });
+      scenes.push({ type: isInter ? kinds[scenes.length % kinds.length] : 'slide', layout: LAYOUTS[i % LAYOUTS.length], title: `${TITLES[i % TITLES.length]} ${i + 1}`, goal: 'Teach or test the topic.', source: ['Section 1'] });
     }
-    return '```json\n' + JSON.stringify({ scenes }) + '\n```';
+    if (/OFFTOPIC/.test(last)) return JSON.stringify({ scope_ok: false, scope_reason: 'Chủ đề là toán học, không phải tiếng Anh.', scenes: [] });
+    return '```json\n' + JSON.stringify({ scope_ok: true, scope_reason: '', scenes }) + '\n```';
   }
   if (/Write ONE scene/.test(last)) {
     const type = (/type "(\w+)"/.exec(last) || [])[1];
     const title = (/title "([^"]+)"/.exec(last) || [])[1];
     if (process.env.MOCK_FAIL_TITLE && title === process.env.MOCK_FAIL_TITLE) return 'Sorry, I cannot do that.';
-    return JSON.stringify(sceneJson(type, title));
+    const layout = (/layout: "(\w+)"/.exec(last) || [])[1];
+    return JSON.stringify(sceneJson(type, title, layout, /Source excerpt for this scene/.test(last)));
   }
   // chat: phản hồi cho biết ngữ cảnh có đáp án hay không để test không lộ đáp án
   const correct = (system.match(/^Correct: /gm) || []).length;

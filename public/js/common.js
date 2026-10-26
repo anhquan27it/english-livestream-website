@@ -139,6 +139,30 @@ function connectSocket() {
   return io({ auth: { token: Auth.token } });
 }
 
+// Danh sách và trình xem bản ghi buổi học của một lớp
+async function openRecordings(classId, canDelete) {
+  const m = openModal('<h3>Bản ghi buổi học 🎬</h3><p class="sub">Xem lại các buổi đã được giáo viên ghi hình.</p><div id="recBody"><div class="empty">Đang tải…</div></div>', { wide: true });
+  const body = m.querySelector('#recBody');
+  const paint = async () => {
+    try {
+      const { recordings } = await api('/api/classes/' + classId + '/recordings');
+      body.innerHTML = recordings.length
+        ? '<div id="recPlayer"></div><div class="list">' + recordings.map((r) => '<div class="list-item"><div class="avatar tone-violet"><i data-lucide="film"></i></div><div class="info"><b>' + esc(r.title) + '</b><small>' + fmtDate(r.createdAt) + ' · ' + fmtDuration(r.durationSec * 1000) + ' · ' + (r.size / 1048576).toFixed(0) + ' MB</small></div><button class="btn btn-primary btn-sm" data-play="' + r.id + '"><i data-lucide="play"></i> Xem</button>' + (canDelete ? '<button class="icon-btn" data-del="' + r.id + '" title="Xoá bản ghi"><i data-lucide="trash-2"></i></button>' : '') + '</div>').join('') + '</div>'
+        : '<div class="empty"><div class="emoji">🎬</div><b>Chưa có bản ghi nào</b>Giáo viên bấm "Ghi hình" trong phòng live để lưu lại buổi học.</div>';
+      icons();
+      body.querySelectorAll('[data-play]').forEach((b) => (b.onclick = () => {
+        body.querySelector('#recPlayer').innerHTML = '<video controls autoplay playsinline style="width:100%;max-height:60vh;border-radius:16px;background:#000;margin-bottom:12px" src="/api/recordings/' + b.dataset.play + '/file?token=' + encodeURIComponent(Auth.token) + '"></video>';
+      }));
+      body.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
+        if (!(await confirmModal('Xoá bản ghi?', 'Bản ghi sẽ bị xoá vĩnh viễn khỏi máy chủ.', 'Xoá'))) return;
+        await api('/api/recordings/' + b.dataset.del, { method: 'DELETE' }).catch((e) => toast(e.message, 'error'));
+        paint();
+      }));
+    } catch (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+  };
+  paint();
+}
+
 // Thanh bên dùng chung cho các trang giáo viên / học sinh
 function buildSidebar(role, active) {
   const nav = role === 'teacher'

@@ -77,6 +77,8 @@ function load() {
   db.settings = db.settings || {};
   db.lessons = db.lessons || [];
   db.chats = db.chats || [];
+  db.recordings = db.recordings || [];
+  db.pdfs = db.pdfs || [];
 }
 
 let saveTimer = null;
@@ -90,6 +92,7 @@ function save() {
 load();
 
 module.exports = {
+  dir: DATA_DIR,
   get data() { return db; },
   save,
   id,

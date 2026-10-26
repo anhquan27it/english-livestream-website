@@ -19,11 +19,23 @@ let usingFallback = false;
 const peers = new Map();  // socketId học sinh -> RTCPeerConnection
 const viewers = new Map(); // socketId -> { name, hand }
 const outStream = new MediaStream();
+const remoteAudio = new Map(); // socketId học sinh -> track âm thanh nhận được (trộn khi cho phép phát biểu)
+let speakerSocket = null;      // socket của học sinh đang được phát biểu
+let rec = null;                // bản ghi đang chạy { mr, chunks, canvas, timer, startedAt }
+let listenEl = null;           // phần tử phát file nghe
+let screenStream = null;       // luồng chia sẻ màn hình (có thể kèm âm thanh hệ thống)
+const FAKE_MIC = new URLSearchParams(location.search).has('fakemic');
+let capRec = null, capOn = false, ccHidden = false, capClear = null; // phụ đề trực tiếp
+let mainMutedBefore = null;     // trạng thái âm thanh phòng chính trước khi vào phòng nhỏ // dùng âm thanh giả để thử khi không có micro
 
 // Học sinh
 let pc = null;
 let handRaised = false;
 const words = [];
+let remoteStream = null;       // gom mọi track nhận từ giáo viên vào một luồng
+let audioSender = null;        // sender âm thanh về phía giáo viên (chỉ phát khi được cho phép)
+let micStream = null, speaking = false, mutedSelf = false;
+let speaker = null;            // người đang phát biểu (cả lớp thấy)
 
 const QUICK_STUDENT = ['Could you repeat that, please? 🙏', 'I understand! 👍', 'Can you speak more slowly?', 'How do you spell it?'];
 const QUICK_TEACHER = ['Great job! 🎉', 'Any questions?', 'Repeat after me 🗣️', "Let's take a short break ☕"];
@@ -58,6 +70,9 @@ async function init() {
 
   socket = connectSocket();
   LessonLive.init({ socket });
+  PdfLive.init({ isTeacher, socket, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel') });
+  PadLive.init({ isTeacher, socket, stage: $('stage'), panel: $('padPanel') });
+  BreakoutLive.init({ isTeacher, socket, stage: $('stage'), panel: $('boPanel'), getMedia: getBreakoutMedia, muteMain: setMainMuted, teacherTracks: () => (camStream ? camStream.getTracks() : []) });
   socket.on('connect', joinRoom);
   socket.on('connect_error', () => toast('Mất kết nối máy chủ, đang thử lại...', 'error'));
   socket.on('chat', addChat);
@@ -67,6 +82,9 @@ async function init() {
   socket.on('kicked', ({ reason }) => finish('🚪', 'Bạn đã rời buổi học', reason));
   socket.on('signal', onSignal);
   socket.on('lesson:state', (st) => LessonLive.apply(st));
+  socket.on('speaker', onSpeaker);
+  socket.on('caption', showCaption);
+  socket.on('reaction', showReaction);
 
   if (isTeacher) {
     socket.on('viewer:joined', (v) => { viewers.set(v.socketId, v); renderPeople(); callViewer(v.socketId); });
@@ -84,6 +102,9 @@ async function init() {
     });
     socket.on('teacher:joined', () => showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'));
     socket.on('hand:lowered', () => { handRaised = false; renderControls(); toast('Giáo viên đã hạ tay của bạn'); });
+    socket.on('speak:granted', startMic);
+    socket.on('speak:revoked', ({ reason }) => stopMic(reason));
+    socket.on('star:received', ({ count }) => { toast(`⭐ Bạn được tặng ${count} sao!`, 'success'); showReaction({ emoji: '⭐', name: me.name }); });
   }
 }
 
@@ -97,6 +118,10 @@ function joinRoom() {
     startTimer(live.startedAt);
     showWord(res.word);
     LessonLive.apply(res.lesson);
+    onSpeaker(res.speaker || null);
+    PdfLive.apply(res.pdf || null);
+    PadLive.apply(res.pad || null);
+    if (isTeacher && res.breakout) BreakoutLive.setState(res.breakout);
     const wanted = new URLSearchParams(location.search).get('lesson');
     if (isTeacher && wanted && !res.lesson) LessonLive.present(wanted);
     if (isTeacher) {
@@ -114,7 +139,26 @@ function joinRoom() {
 }
 
 // ---------------- Giáo viên: media ----------------
+function fakeAudio(freq) {
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  const dest = ac.createMediaStreamDestination();
+  osc.frequency.value = freq;
+  gain.gain.value = 0.2;
+  osc.connect(gain); gain.connect(dest); osc.start();
+  return dest.stream.getAudioTracks()[0];
+}
+
 async function startMedia() {
+  if (FAKE_MIC) {
+    usingFallback = true;
+    camStream = new MediaStream([fakeAudio(220), canvasTrack()]);
+    camStream.getTracks().forEach((t) => outStream.addTrack(t));
+    showLocalPreview();
+    renderControls();
+    return;
+  }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: { echoCancellation: true, noiseSuppression: true } });
   } catch {
@@ -168,19 +212,30 @@ function showLocalPreview() {
 async function toggleScreen() {
   if (screenTrack) return stopScreen();
   try {
-    const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
-    screenTrack = s.getVideoTracks()[0];
+    // audio: true => nếu người dùng tick "Chia sẻ âm thanh" (tab/hệ thống), âm thanh đó được trộn vào luồng phát (dùng cho bài nghe)
+    const st = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: true });
+    screenStream = st;
+    screenTrack = st.getVideoTracks()[0];
     screenTrack.onended = stopScreen;
+    const sysAudio = st.getAudioTracks()[0];
+    if (sysAudio) {
+      ensureMixer();
+      Mixer.attachSystem(sysAudio);
+      toast('Đang chia sẻ cả âm thanh hệ thống', 'success');
+    } else {
+      toast('Đang chia sẻ màn hình (chưa có âm thanh — khi chọn, hãy tick "Chia sẻ âm thanh" nếu cần phát bài nghe)');
+    }
     replaceVideo(screenTrack);
-    toast('Đang chia sẻ màn hình');
   } catch { /* người dùng huỷ */ }
 }
 
 function stopScreen() {
   if (!screenTrack) return;
   screenTrack.onended = null;
-  screenTrack.stop();
+  if (screenStream) screenStream.getTracks().forEach((t) => t.stop());
+  screenStream = null;
   screenTrack = null;
+  Mixer.detachSystem();
   replaceVideo(camStream.getVideoTracks()[0]);
 }
 
@@ -206,9 +261,15 @@ async function callViewer(id) {
   closePeer(id);
   const p = new RTCPeerConnection(RTC);
   peers.set(id, p);
-  const audio = camStream.getAudioTracks()[0];
-  if (audio) p.addTrack(audio, outStream);
+  // Kênh âm thanh luôn là sendrecv: giáo viên phát (micro hoặc bản trộn) và nhận giọng học sinh khi được phép phát biểu
+  const tr = p.addTransceiver('audio', { direction: 'sendrecv', streams: [outStream] });
+  tr.sender.replaceTrack(audioSenderTrack(id));
   p.addTrack(currentVideoTrack(), outStream);
+  p.ontrack = (e) => {
+    if (e.track.kind !== 'audio') return;
+    remoteAudio.set(id, e.track);
+    if (speakerSocket === id && Mixer.active) Mixer.attachSpeaker(e.track);
+  };
   p.onicecandidate = (e) => e.candidate && socket.emit('signal', { to: id, data: { candidate: e.candidate } });
   p.onconnectionstatechange = () => {
     const v = viewers.get(id);
@@ -220,6 +281,7 @@ async function callViewer(id) {
 }
 
 function closePeer(id) {
+  remoteAudio.delete(id);
   const p = peers.get(id);
   if (p) { p.close(); peers.delete(id); }
 }
@@ -237,13 +299,20 @@ async function onSignal({ from, data }) {
     if (data.sdp && data.sdp.type === 'offer') {
       closeStudentPeer();
       pc = new RTCPeerConnection(RTC);
-      pc.ontrack = (e) => attachRemote(e.streams[0]);
+      pc.ontrack = (e) => {
+        remoteStream = remoteStream || new MediaStream();
+        remoteStream.addTrack(e.track);
+        attachRemote(remoteStream);
+      };
       pc.onicecandidate = (e) => e.candidate && socket.emit('signal', { to: from, data: { candidate: e.candidate } });
       pc.onconnectionstatechange = () => {
         if (pc && ['failed', 'disconnected'].includes(pc.connectionState)) showState('📶', 'Kết nối không ổn định', 'Đang thử kết nối lại...');
         if (pc && pc.connectionState === 'connected') hideState();
       };
       await pc.setRemoteDescription(data.sdp);
+      // Mở sẵn đường âm thanh gửi về giáo viên (chưa có track); khi được cho phép phát biểu chỉ cần replaceTrack
+      const at = pc.getTransceivers().find((t) => t.receiver.track && t.receiver.track.kind === 'audio');
+      if (at) { at.direction = 'sendrecv'; audioSender = at.sender; }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('signal', { to: from, data: { sdp: pc.localDescription } });
@@ -281,6 +350,9 @@ function showUnmute() {
 }
 
 function closeStudentPeer() {
+  stopMic();
+  remoteStream = null;
+  audioSender = null;
   if (pc) { pc.close(); pc = null; }
 }
 
@@ -297,8 +369,10 @@ function setupUi() {
     socket.emit('chat', { text });
     $('chatInput').value = '';
   };
-  const panels = { chat: 'chatPanel', people: 'peoplePanel', lesson: 'lessonPanel', ai: 'aiPanel' };
+  const panels = { chat: 'chatPanel', people: 'peoplePanel', lesson: 'lessonPanel', ai: 'aiPanel', breakout: 'boPanel', pad: 'padPanel' };
   $('tabLesson').hidden = !isTeacher;
+  $('tabBo').hidden = !isTeacher;
+  $('tabPad').hidden = !isTeacher;
   $('tabAi').hidden = isTeacher;
   if (!isTeacher) aiChat = AiChat.mount($('aiPanel'), { classId, dark: true });
   document.querySelectorAll('[data-panel]').forEach((b) => (b.onclick = () => {
@@ -326,20 +400,34 @@ function renderControls() {
       ctrl('cMic', micOn ? 'mic' : 'mic-off', micOn ? 'Micro' : 'Đã tắt mic', micOn ? '' : 'off') +
       ctrl('cCam', camOn ? 'video' : 'video-off', camOn ? 'Camera' : 'Đã tắt cam', camOn ? '' : 'off') +
       ctrl('cScreen', screenTrack ? 'monitor-off' : 'monitor-up', screenTrack ? 'Dừng chia sẻ' : 'Chia sẻ màn hình', screenTrack ? 'on' : '') +
+      ctrl('cListen', 'headphones', 'Phát file nghe', listenEl ? 'on' : '') +
+      ctrl('cRec', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi hình', rec ? 'danger' : '') +
+      ctrl('cMuteAll', 'mic-off', 'Tắt mic lớp', speakerSocket ? 'on' : '') +
+      ctrl('cCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') +
       ctrl('cWord', 'book-open-text', 'Thẻ từ vựng') +
       ctrl('cEnd', 'square', 'Kết thúc', 'danger');
     $('cMic').onclick = () => toggleTrack('audio');
     $('cCam').onclick = () => toggleTrack('video');
     $('cScreen').onclick = toggleScreen;
     $('cWord').onclick = wordModal;
+    $('cListen').onclick = listenModal;
+    $('cRec').onclick = toggleRecord;
+    $('cCap').onclick = toggleCaptions;
+    $('cMuteAll').onclick = () => socket.emit('speak:revoke', null, () => toast('Đã tắt mic cả lớp'));
     $('cEnd').onclick = endLive;
   } else {
     box.innerHTML =
       ctrl('cHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay', handRaised ? 'on' : '') +
+      (speaking ? ctrl('cMyMic', mutedSelf ? 'mic-off' : 'mic', mutedSelf ? 'Mic đang tắt' : 'Bạn đang nói', mutedSelf ? 'off' : 'on') : '') +
+      ctrl('cReact', 'smile', 'Cảm xúc') +
+      ctrl('cCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '') +
       ctrl('cSound', video.muted ? 'volume-x' : 'volume-2', video.muted ? 'Bật tiếng' : 'Âm thanh', video.muted ? 'off' : '') +
       ctrl('cFull', 'maximize', 'Toàn màn hình') +
       ctrl('cLeave', 'log-out', 'Rời lớp', 'danger');
     $('cHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); };
+    if ($('cMyMic')) $('cMyMic').onclick = () => { mutedSelf = !mutedSelf; if (micStream) micStream.getAudioTracks().forEach((t) => (t.enabled = !mutedSelf)); renderControls(); };
+    $('cReact').onclick = reactPicker;
+    $('cCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); };
     $('cSound').onclick = () => { video.muted = !video.muted; if (!video.muted) { video.play(); $('unmuteBtn')?.remove(); } renderControls(); };
     $('cFull').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {}));
     $('cLeave').onclick = () => leave();
@@ -366,9 +454,18 @@ function renderPeople() {
     <div class="viewer">${avatar(v.name, 'sm round')}
       <div class="info">${esc(v.name)}<small>${v.state === 'connected' ? '● Đang xem' : v.state === 'failed' ? 'Kết nối lỗi' : 'Đang kết nối...'}</small></div>
       ${v.hand ? `<span class="hand">✋</span><button class="icon-btn" data-lower="${id}" title="Hạ tay"><i data-lucide="hand"></i></button>` : ''}
+      <button class="icon-btn" data-star="${id}" title="Tặng sao (+10 điểm)"><i data-lucide="star"></i></button>
+      <button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? 'Thu lại mic' : 'Cho phép phát biểu'}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>
       <button class="icon-btn" data-kick="${id}" title="Mời rời buổi học"><i data-lucide="user-x"></i></button>
     </div>`).join('')
     : '<div class="empty" style="color:#8885ab"><div class="emoji">👀</div>Chưa có học sinh nào vào xem.<br />Học sinh trong lớp sẽ nhận được thông báo.</div>';
+  panel.querySelectorAll('[data-star]').forEach((b) => (b.onclick = () => socket.emit('star:give', { socketId: b.dataset.star, count: 1 })));
+  panel.querySelectorAll('[data-speak]').forEach((b) => (b.onclick = () => {
+    const id = b.dataset.speak;
+    if (speakerSocket === id) return socket.emit('speak:revoke');
+    ensureMixer(); // cần thao tác người dùng để bật bộ trộn âm thanh
+    socket.emit('speak:grant', { socketId: id }, (r) => r && r.error && toast(r.error, 'error'));
+  }));
   panel.querySelectorAll('[data-lower]').forEach((b) => (b.onclick = () => socket.emit('hand:lower', { socketId: b.dataset.lower })));
   panel.querySelectorAll('[data-kick]').forEach((b) => (b.onclick = async () => {
     const v = viewers.get(b.dataset.kick);
@@ -454,7 +551,12 @@ function finish(emoji, title, text) {
   ended = true;
   clearInterval(timerInt);
   $('liveBadge').hidden = true;
+  if (rec) stopRecord();
+  stopCaptions();
+  if (listenEl) listenEl.pause();
+  stopMic();
   if (camStream) camStream.getTracks().forEach((t) => t.stop());
+  if (screenStream) screenStream.getTracks().forEach((t) => t.stop());
   if (screenTrack) screenTrack.stop();
   peers.forEach((p) => p.close());
   closeStudentPeer();
@@ -484,4 +586,283 @@ function showState(emoji, title, text, withBack = false) {
 
 function hideState() {
   if (!ended) $('stageState').hidden = true;
+}
+
+// ---------------- Âm thanh: trộn, phát biểu, file nghe ----------------
+// Track âm thanh gửi cho một học sinh: chưa dùng bộ trộn thì gửi micro trực tiếp như trước
+function audioSenderTrack(id) {
+  if (!Mixer.active) return camStream ? camStream.getAudioTracks()[0] || null : null;
+  return id === speakerSocket ? Mixer.exclTrack : Mixer.allTrack;
+}
+
+function refreshAudioSenders() {
+  peers.forEach((p, id) => {
+    const tr = p.getTransceivers().find((t) => t.receiver.track && t.receiver.track.kind === 'audio');
+    if (tr) tr.sender.replaceTrack(audioSenderTrack(id)).catch(() => {});
+  });
+}
+
+// Bật bộ trộn (gọi trong thao tác click) rồi chuyển mọi học sinh sang luồng trộn
+function ensureMixer() {
+  const wasActive = Mixer.active;
+  Mixer.start(camStream && camStream.getAudioTracks()[0]);
+  if (!wasActive) refreshAudioSenders();
+}
+
+function onSpeaker(info) {
+  speaker = info;
+  speakerSocket = info ? info.socketId : null;
+  const badge = $('speakerBadge');
+  badge.hidden = !info;
+  if (info) badge.innerHTML = `<i data-lucide="mic"></i> ${esc(info.name)} đang phát biểu`;
+  if (isTeacher) {
+    if (info && Mixer.active && remoteAudio.get(info.socketId)) Mixer.attachSpeaker(remoteAudio.get(info.socketId));
+    else Mixer.detachSpeaker();
+    if (Mixer.active) refreshAudioSenders();
+    renderPeople();
+    renderControls();
+  }
+  icons();
+}
+
+async function startMic() {
+  try {
+    if (FAKE_MIC) micStream = new MediaStream([fakeAudio(660)]);
+    else micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const track = micStream.getAudioTracks()[0];
+    track.enabled = !mutedSelf;
+    if (audioSender) await audioSender.replaceTrack(track);
+    speaking = true;
+    toast('🎤 Giáo viên cho phép bạn phát biểu — hãy nói nhé!', 'success');
+  } catch {
+    toast('Không bật được micro. Hãy cho phép trình duyệt dùng micro rồi nhờ giáo viên mời lại.', 'error');
+  }
+  renderControls();
+}
+
+function stopMic(reason) {
+  if (!speaking && !micStream) return;
+  speaking = false;
+  mutedSelf = false;
+  if (audioSender) audioSender.replaceTrack(null).catch(() => {});
+  if (micStream) micStream.getTracks().forEach((t) => t.stop());
+  micStream = null;
+  if (reason) toast(reason);
+  renderControls();
+}
+
+// File nghe: phát trong trình duyệt của giáo viên, trộn vào luồng nên cả lớp nghe cùng lúc với âm thanh gốc
+function listenModal() {
+  const m = openModal(`<h3>Phát file nghe 🎧</h3>
+    <p class="sub">Chọn file âm thanh hoặc video (mp3, wav, m4a, mp4…). Cả lớp sẽ nghe đồng thời với âm thanh gốc; bạn có thể tạm dừng, tua, chỉnh âm lượng ngay trên thanh phát. Nên tắt micro của bạn khi phát.</p>
+    <div class="field"><input type="file" id="listenFile" accept="audio/*,video/*" class="input" /></div>
+    <div class="modal-actions"><button class="btn btn-outline" data-close>Đóng</button></div>`);
+  m.querySelector('#listenFile').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    ensureMixer();
+    if (!listenEl) {
+      listenEl = document.createElement('audio');
+      listenEl.controls = true;
+      listenEl.className = 'listen-player';
+      Mixer.attachFile(listenEl);
+      const bar = document.createElement('div');
+      bar.id = 'listenBar';
+      bar.innerHTML = '<b></b>';
+      bar.appendChild(listenEl);
+      const close = document.createElement('button');
+      close.className = 'icon-btn';
+      close.title = 'Đóng trình phát';
+      close.innerHTML = '<i data-lucide="x"></i>';
+      close.onclick = () => { listenEl.pause(); listenEl.removeAttribute('src'); listenEl.load(); bar.remove(); listenEl = null; renderControls(); };
+      bar.appendChild(close);
+      $('controls').before(bar);
+    }
+    listenEl.src = URL.createObjectURL(f);
+    $('listenBar').querySelector('b').textContent = '🎧 ' + f.name;
+    listenEl.play().catch(() => {});
+    m.close();
+    renderControls();
+    icons();
+  };
+}
+
+// ---------------- Ghi hình buổi học (video + âm thanh của giáo viên) ----------------
+async function toggleRecord() {
+  if (rec) return stopRecord();
+  if (typeof MediaRecorder === 'undefined') return toast('Trình duyệt này không hỗ trợ ghi hình.', 'error');
+  ensureMixer();
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280; canvas.height = 720;
+  const ctx = canvas.getContext('2d');
+  // Vẽ lại phần tử video mỗi khung hình nên đổi giữa camera và chia sẻ màn hình vẫn được ghi liền mạch
+  const draw = () => {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1280, 720);
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (vw && vh) { const k = Math.min(1280 / vw, 720 / vh); ctx.drawImage(video, (1280 - vw * k) / 2, (720 - vh * k) / 2, vw * k, vh * k); }
+  };
+  draw();
+  const timer = setInterval(draw, 40);
+  const stream = canvas.captureStream(25);
+  stream.addTrack(Mixer.allTrack);
+  const mime = ['video/webm;codecs=vp8,opus', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+  const mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 });
+  const chunks = [];
+  mr.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+  mr.onstop = () => {
+    clearInterval(timer);
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    // MediaRecorder không ghi thời lượng vào webm nên không tua được; thư viện này (MIT) bổ sung thông tin đó
+    if (window.ysFixWebmDuration) window.ysFixWebmDuration(blob, seconds * 1000, (fixed) => saveRecordingModal(fixed, seconds));
+    else saveRecordingModal(blob, seconds);
+  };
+  const startedAt = Date.now();
+  mr.start(2000);
+  rec = { mr, startedAt, tick: setInterval(renderControls, 1000) };
+  toast('● Đang ghi hình buổi học', 'success');
+  renderControls();
+}
+
+function stopRecord() {
+  if (!rec) return;
+  const r = rec;
+  rec = null;
+  clearInterval(r.tick);
+  try { r.mr.stop(); } catch {}
+  renderControls();
+}
+
+function saveRecordingModal(blob, seconds) {
+  const mb = (blob.size / 1048576).toFixed(1);
+  const url = URL.createObjectURL(blob);
+  const m = openModal(`<h3>Đã ghi xong 🎬</h3>
+    <p class="sub">Thời lượng ${fmtDuration(seconds * 1000)} · ${mb} MB. Lưu lên lớp để học sinh xem lại, hoặc tải về máy.</p>
+    <div class="field"><label>Tên bản ghi</label><input class="input" id="recTitle" value="${esc($('liveTitle').textContent || 'Buổi học')}" /></div>
+    <div class="form-error" id="recErr"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" data-close>Bỏ</button>
+      <a class="btn btn-outline" href="${url}" download="buoi-hoc.webm"><i data-lucide="download"></i> Tải về</a>
+      <button class="btn btn-primary" id="recUp"><i data-lucide="upload"></i> Lưu lên lớp</button>
+    </div>`);
+  icons();
+  m.querySelector('#recUp').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = 'Đang tải lên…';
+    try {
+      const res = await fetch(`/api/classes/${classId}/recordings`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + Auth.token, 'X-Title': encodeURIComponent(m.querySelector('#recTitle').value), 'X-Duration': String(seconds) },
+        body: blob,
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      toast('Đã lưu bản ghi cho lớp', 'success');
+      m.close();
+    } catch (err) {
+      m.querySelector('#recErr').textContent = err.message;
+      btn.disabled = false; btn.textContent = 'Thử lại';
+    }
+  };
+}
+
+// ---------------- Cảm xúc ----------------
+const REACTIONS = ['👍', '❤️', '😂', '👏', '😮', '🎉', '🙋'];
+function reactPicker() {
+  let pop = $('reactPop');
+  if (pop) return pop.remove();
+  pop = document.createElement('div');
+  pop.id = 'reactPop';
+  pop.innerHTML = REACTIONS.map((e) => `<button type="button">${e}</button>`).join('');
+  pop.querySelectorAll('button').forEach((b) => (b.onclick = () => { socket.emit('reaction', { emoji: b.textContent }); pop.remove(); }));
+  $('controls').before(pop);
+}
+
+function showReaction({ emoji, name }) {
+  const layer = $('reactLayer');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = 'react';
+  el.style.left = 8 + Math.random() * 70 + '%';
+  el.innerHTML = `<span>${emoji}</span><small>${esc(name || '')}</small>`;
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+// ---------------- Phụ đề trực tiếp ----------------
+// Giáo viên: nhận dạng giọng nói bằng Web Speech API (Chrome/Edge, gửi âm thanh tới dịch vụ của trình duyệt), máy chủ chuyển chữ cho cả lớp
+function toggleCaptions() {
+  if (capOn) return stopCaptions();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return toast('Trình duyệt này không hỗ trợ nhận dạng giọng nói. Hãy dùng Chrome hoặc Edge.', 'error');
+  const m = openModal(`<h3>Phụ đề trực tiếp 💬</h3><p class="sub">Trình duyệt sẽ nghe micro của bạn và hiện chữ cho cả lớp. Chọn ngôn ngữ bạn đang nói.</p>
+    <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn btn-primary" data-lang="en-US">English (US)</button><button class="btn btn-outline" data-lang="en-GB">English (UK)</button><button class="btn btn-outline" data-lang="vi-VN">Tiếng Việt</button></div>`);
+  m.querySelectorAll('[data-lang]').forEach((b) => (b.onclick = () => { m.close(); startCaptions(b.dataset.lang, SR); }));
+}
+
+function startCaptions(lang, SR) {
+  capRec = new SR();
+  capRec.lang = lang;
+  capRec.continuous = true;
+  capRec.interimResults = true;
+  capOn = true;
+  capRec.onresult = (e) => {
+    let interim = '', fin = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) fin += r[0].transcript; else interim += r[0].transcript;
+    }
+    if (fin.trim()) socket.emit('caption', { text: fin.trim(), final: true });
+    else if (interim.trim()) socket.emit('caption', { text: interim.trim(), final: false });
+  };
+  // Chrome tự dừng sau một lúc im lặng: bật lại khi còn muốn phụ đề
+  capRec.onend = () => { if (capOn) { try { capRec.start(); } catch {} } };
+  capRec.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { stopCaptions(); toast('Chưa được phép dùng micro để tạo phụ đề.', 'error'); } };
+  try { capRec.start(); toast('Đang bật phụ đề trực tiếp', 'success'); } catch { capOn = false; }
+  renderControls();
+}
+
+function stopCaptions() {
+  if (!capOn && !capRec) return;
+  capOn = false;
+  if (capRec) { capRec.onend = null; try { capRec.stop(); } catch {} capRec = null; }
+  $('captions').hidden = true;
+  if (typeof renderControls === 'function' && !ended) renderControls();
+}
+
+function showCaption({ text, final }) {
+  const box = $('captions');
+  if (ccHidden && !isTeacher) return;
+  box.textContent = text;
+  box.hidden = false;
+  box.classList.toggle('interim', !final);
+  clearTimeout(capClear);
+  capClear = setTimeout(() => (box.hidden = true), final ? 4500 : 7000);
+}
+
+// ---------------- Phòng nhỏ: hỗ trợ cho BreakoutLive ----------------
+async function getBreakoutMedia() {
+  if (FAKE_MIC) {
+    let h = 0;
+    for (const c of me.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return new MediaStream([fakeAudio(300 + (h % 400)), canvasTrack()]);
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360 }, audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch {
+    return navigator.mediaDevices.getUserMedia({ audio: true }); // không có camera: chỉ tiếng
+  }
+}
+
+// Tắt/mở tiếng phòng chính khi vào/ra phòng nhỏ (nhớ trạng thái cũ để trả lại)
+function setMainMuted(on) {
+  if (on) {
+    if (mainMutedBefore === null) mainMutedBefore = video.muted;
+    video.muted = true;
+  } else if (mainMutedBefore !== null) {
+    video.muted = mainMutedBefore;
+    mainMutedBefore = null;
+    if (!video.muted) video.play().catch(() => {});
+  }
+  renderControls();
 }

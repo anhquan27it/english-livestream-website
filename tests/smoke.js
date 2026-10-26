@@ -125,6 +125,28 @@ async function main() {
     assert.ok(lesson.scenes.some((s) => s.type === 'quiz') && lesson.scenes[0].type === 'slide');
     scenes = lesson.scenes;
   });
+  await test('chủ đề không phải tiếng Anh bị từ chối ở bước outline (HTTP 422)', async () => {
+    const l = (await api(T, 'POST', '/api/lessons', { title: 'Toán lớp 9', topic: 'OFFTOPIC dạy giải phương trình bậc hai', sceneCount: 6 })).body.lesson;
+    const o = await api(T, 'POST', `/api/lessons/${l.id}/outline`, {});
+    assert.equal(o.status, 422);
+    assert.match(o.body.error, /không phải bài học tiếng Anh/);
+    await api(T, 'DELETE', `/api/lessons/${l.id}`);
+  });
+  await test('bài giảng đa dạng bố cục, có nguồn, và mỗi slide chỉ nhận đúng phần tài liệu', async () => {
+    const layouts = new Set(scenes.filter((s) => s.type === 'slide').map((s) => s.layout));
+    assert.ok(layouts.size >= 3, 'nhiều bố cục khác nhau: ' + [...layouts]);
+    const rule = scenes.find((s) => s.layout === 'rule');
+    assert.ok(rule && rule.rule.formula && rule.rule.examples.length, 'slide quy tắc có công thức + ví dụ');
+    // bảng/bài đọc được lưu và chuẩn hoá đúng qua PUT
+    const custom = { id: 's_custom', type: 'slide', title: 'Table', layout: 'table', table: { headers: ['Verb', 'Past'], rows: [['go', 'went'], ['', ''], ['buy', 'bought']] }, passage: 'A **key** word', bullets: [] };
+    const saved = (await api(T, 'PUT', `/api/lessons/${lessonId}`, { scenes: [...scenes, custom] })).body.lesson.scenes.pop();
+    assert.deepEqual(saved.table.rows, [['go', 'went'], ['buy', 'bought']]);
+    assert.equal(saved.passage, 'A **key** word');
+    await api(T, 'PUT', `/api/lessons/${lessonId}`, { scenes });
+    assert.ok(scenes.find((s) => s.layout === 'dialogue').dialogue.length >= 2);
+    assert.ok(scenes.every((s) => s.source === 'Section 1'), 'mỗi slide ghi phần tài liệu nguồn');
+    assert.ok(scenes.filter((s) => s.type === 'slide').every((s) => /[excerpt:true]/.test(s.note)), 'prompt từng slide chứa đoạn trích tài liệu');
+  });
   await test('sinh lại một slide với yêu cầu riêng', async () => {
     const r = await api(T, 'POST', `/api/lessons/${lessonId}/scenes/${scenes[0].id}/regenerate`, { instruction: 'Làm dễ hơn' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -224,6 +246,234 @@ async function main() {
       assert.equal((await ended).activity.result.me.correct, true);
     }
   });
+  console.log('Tương tác lớp học (phát biểu, cảm xúc, sao, đếm ngược)');
+  const S2 = await login('student2@demo.com');
+  const s2 = await connect(S2);
+  await emit(s2, 'room:join', { classId: ielts.id });
+  await test('chỉ giáo viên được cho học sinh phát biểu; mỗi lúc một người; thu mic', async () => {
+    assert.ok((await emit(ss, 'speak:grant', { socketId: ss.id })).error, 'học sinh không tự cấp quyền');
+    const granted = nextEvent(ss, 'speak:granted');
+    const spk = nextEvent(s2, 'speaker', (x) => x && x.name === 'Nguyễn Minh Anh');
+    assert.ok((await emit(ts, 'speak:grant', { socketId: ss.id })).ok);
+    await granted;
+    assert.equal((await spk).socketId, ss.id);
+    const revoked = nextEvent(ss, 'speak:revoked');
+    const spk2 = nextEvent(s2, 'speaker', (x) => x && x.socketId === s2.id);
+    await emit(ts, 'speak:grant', { socketId: s2.id });
+    await revoked; // người trước bị thu mic khi giáo viên chọn người khác
+    assert.equal((await spk2).socketId, s2.id);
+    const none = nextEvent(ss, 'speaker', (x) => x === null);
+    assert.ok((await emit(ts, 'speak:revoke')).ok);
+    await none;
+    assert.ok((await emit(ss, 'speak:revoke')).error, 'học sinh không thu mic của người khác');
+  });
+  await test('học sinh đang phát biểu rời phòng thì mic được thu lại', async () => {
+    await emit(ts, 'speak:grant', { socketId: s2.id });
+    const none = nextEvent(ss, 'speaker', (x) => x === null);
+    s2.close();
+    await none;
+  });
+  await test('reactions: chỉ emoji hợp lệ, có giới hạn tần suất', async () => {
+    const got = nextEvent(ts, 'reaction');
+    ss.emit('reaction', { emoji: '🎉' });
+    assert.equal((await got).emoji, '🎉');
+    let extra = false;
+    ts.once('reaction', () => (extra = true));
+    ss.emit('reaction', { emoji: '💣' }); // không hợp lệ
+    ss.emit('reaction', { emoji: '👍' }); // quá nhanh sau lần trước
+    await sleep(300);
+    assert.equal(extra, false);
+  });
+  await test('tặng sao cộng điểm và hiện trên bảng xếp hạng; học sinh không tự tặng', async () => {
+    assert.ok((await emit(ss, 'star:give', { socketId: ss.id })).error);
+    const got = nextEvent(ss, 'star:received');
+    assert.ok((await emit(ts, 'star:give', { socketId: ss.id, count: 2 })).ok);
+    assert.equal((await got).count, 2);
+  });
+  await test('hoạt động có đếm ngược tự chốt khi hết giờ', async () => {
+    emit(ts, 'slide:goto', { index: quizIdx });
+    await sleep(100);
+    const open = nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'open');
+    ts.emit('activity:start', { seconds: 1 });
+    const st = await open;
+    assert.ok(st.activity.endsAt > Date.now() - 500 && st.activity.endsAt < Date.now() + 2000);
+    const ended = await nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'ended', 4000);
+    assert.equal(ended.activity.result.me.answered, false);
+    assert.ok(ended.leaderboard.some((r) => r.name === 'Nguyễn Minh Anh' && r.stars === 2), 'sao hiện trong bảng xếp hạng');
+  });
+  console.log('Điền từ & đọc to');
+  const gameLesson = (await api(T, 'POST', '/api/lessons', { title: 'Games', sceneCount: 6 })).body.lesson;
+  await test('điền từ: lưu/chuẩn hoá, học sinh không nhận đáp án, chấm không phân biệt hoa thường & dấu câu', async () => {
+    const put = await api(T, 'PUT', `/api/lessons/${gameLesson.id}`, { scenes: [
+      { id: 'f1', type: 'fill', title: 'Gap', sentence: 'I ____ to school and she ___ home.', answers: [['went'], ['stayed', 'stay']], hint: 'go / stay' },
+      { id: 'bad', type: 'fill', title: 'Bad', sentence: 'No blank here', answers: [['x']] }, // bị loại
+      { id: 'sp1', type: 'speak', title: 'Read', sentence: 'Where is the departure gate?', translation: 'Cổng khởi hành ở đâu?' },
+    ] });
+    assert.equal(put.body.lesson.scenes.length, 2, 'scene điền từ không có chỗ trống bị loại');
+    assert.equal(put.body.lesson.scenes[0].sentence, 'I ___ to school and she ___ home.');
+    const shown = nextEvent(ss, 'lesson:state', (s) => s && s.id === gameLesson.id);
+    assert.ok((await emit(ts, 'lesson:present', { lessonId: gameLesson.id })).ok);
+    const st0 = await shown;
+    assert.equal(st0.scene.blanks, 2);
+    const open = nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'open');
+    ts.emit('activity:start');
+    const st = await open;
+    assert.ok(!/went|stayed/.test(JSON.stringify(st)), 'đáp án không lộ trước khi chốt');
+    assert.ok((await emit(ss, 'activity:answer', { answer: ['went'] })).error, 'thiếu ô thì bị từ chối');
+    assert.ok((await emit(ss, 'activity:answer', { answer: ['Went.', ' STAYED '] })).ok);
+    const ended = nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'ended');
+    ts.emit('activity:end');
+    const r = (await ended).activity.result;
+    assert.deepEqual(r.reveal.answers, ['went', 'stayed']);
+    assert.equal(r.me.correct, true);
+    assert.deepEqual(r.me.detail.blanks, [true, true]);
+  });
+  await test('đọc to: chấm theo từ nhận dạng được, chi tiết từng từ cho học sinh', async () => {
+    emit(ts, 'slide:goto', { index: 1 });
+    await sleep(100);
+    const open = nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'open' && s.scene.type === 'speak');
+    ts.emit('activity:start');
+    const st = await open;
+    assert.equal(st.activity.play.sentence, 'Where is the departure gate?');
+    assert.ok((await emit(ss, 'activity:answer', { answer: 'where is the gate' })).error, 'định dạng sai bị từ chối');
+    assert.ok((await emit(ss, 'activity:answer', { answer: { transcript: 'where is departure gate' } })).ok);
+    const ended = nextEvent(ss, 'lesson:state', (s) => s && s.activity && s.activity.phase === 'ended' && s.scene.type === 'speak');
+    ts.emit('activity:end');
+    const me = (await ended).activity.result.me;
+    assert.equal(me.fraction, 0.8);
+    assert.equal(me.correct, true);
+    assert.deepEqual(me.detail.words.map((w) => w.ok), [true, true, false, true, true]);
+    assert.ok(me.points >= 80);
+  });
+  // trả lại bài giảng chính + hoạt động đã chốt cho các kiểm tra sau
+  assert.ok((await emit(ts, 'lesson:present', { lessonId })).ok);
+  emit(ts, 'slide:goto', { index: quizIdx });
+  await sleep(100);
+  ts.emit('activity:start');
+  await sleep(100);
+  ts.emit('activity:end');
+  await sleep(150);
+  console.log('Phụ đề, bảng viết, PDF, phòng nhỏ');
+  await test('phụ đề: chỉ giáo viên gửi, cả lớp nhận', async () => {
+    const got = nextEvent(ss, 'caption', (c) => c.final === true);
+    ts.emit('caption', { text: 'Hello class', final: true });
+    assert.equal((await got).text, 'Hello class');
+    let leaked = false;
+    ts.once('caption', () => (leaked = true));
+    ss.emit('caption', { text: 'học sinh gửi', final: true });
+    await sleep(250);
+    assert.equal(leaked, false);
+  });
+  await test('bảng viết: học sinh viết, giáo viên chiếu bài và tô màu sửa lỗi cho cả lớp', async () => {
+    assert.ok((await emit(ss, 'pad:open', { prompt: 'x' })).error, 'học sinh không mở được bảng');
+    const opened = nextEvent(ss, 'pad:state', (s) => s && s.prompt === 'Write about your trip.');
+    assert.ok((await emit(ts, 'pad:open', { prompt: 'Write about your trip.' })).ok);
+    assert.equal((await opened).mine, '');
+    const entry = nextEvent(ts, 'pad:entry');
+    assert.ok((await emit(ss, 'pad:write', { text: 'I goed to Japan yesterday.' })).ok);
+    assert.equal((await entry).text, 'I goed to Japan yesterday.');
+    assert.ok((await emit(ss, 'pad:feature', { userId: 'x' })).error, 'học sinh không chọn bài được');
+    const feat = nextEvent(ss, 'pad:state', (s) => s && s.featured);
+    const me = (await api(S1, 'GET', '/api/me')).body.user;
+    assert.ok((await emit(ts, 'pad:feature', { userId: me.id })).ok);
+    const f = (await feat).featured;
+    assert.equal(f.name, 'Nguyễn Minh Anh');
+    assert.deepEqual(f.marks, []);
+    assert.ok((await emit(ts, 'pad:mark', { start: 0, end: 999, color: 'red' })).error, 'vùng chọn ngoài văn bản bị từ chối');
+    assert.ok((await emit(ts, 'pad:mark', { start: 0, end: 4, color: 'pink' })).error, 'màu lạ bị từ chối');
+    assert.ok((await emit(ss, 'pad:mark', { start: 0, end: 4, color: 'red' })).error, 'học sinh không tô màu được');
+    const marks = nextEvent(ss, 'pad:marks', (m) => m.marks.length === 1);
+    assert.ok((await emit(ts, 'pad:mark', { start: 2, end: 7, color: 'red', fix: 'went', note: 'Irregular verb' })).ok);
+    assert.deepEqual((await marks).marks[0], { start: 2, end: 7, color: 'red', fix: 'went', note: 'Irregular verb' });
+    const cleared = nextEvent(ss, 'pad:marks', (m) => m.marks.length === 0);
+    ts.emit('pad:unmark', { index: 0 });
+    await cleared;
+    const closed = nextEvent(ss, 'pad:state', (s) => s === null);
+    ts.emit('pad:close');
+    await closed;
+  });
+  await test('chiếu PDF: tải lên, chỉ thành viên lớp tải được, đồng bộ trang, loại trừ với bài giảng', async () => {
+    const pdf = tinyPdf('Page one text');
+    const up = await fetch(BASE + `/api/classes/${ielts.id}/pdfs`, { method: 'POST', headers: { Authorization: 'Bearer ' + T, 'X-Filename': encodeURIComponent('handout.pdf') }, body: pdf });
+    assert.equal(up.status, 200);
+    const rec = (await up.json()).pdf;
+    assert.equal(rec.name, 'handout.pdf');
+    assert.equal((await fetch(BASE + `/api/classes/${ielts.id}/pdfs`, { method: 'POST', headers: { Authorization: 'Bearer ' + T }, body: Buffer.from('not a pdf') })).status, 400);
+    assert.equal((await fetch(BASE + `/api/classes/${ielts.id}/pdfs`, { method: 'POST', headers: { Authorization: 'Bearer ' + S1 }, body: pdf })).status, 403);
+    assert.equal((await api(T, 'GET', `/api/classes/${ielts.id}/pdfs`)).body.pdfs.length, 1);
+    const file = await fetch(BASE + `/api/pdfs/${rec.id}/file?token=${S1}`);
+    assert.equal(file.status, 200);
+    assert.equal(file.headers.get('content-type'), 'application/pdf');
+    assert.equal((await fetch(BASE + `/api/pdfs/${rec.id}/file?token=${S3}`)).status, 404);
+    const shown = nextEvent(ss, 'pdf:state', (p) => p && p.id === rec.id);
+    const lessonOff = nextEvent(ss, 'lesson:state', (s) => s === null);
+    assert.ok((await emit(ts, 'pdf:present', { fileId: rec.id })).ok);
+    assert.equal((await shown).page, 1);
+    await lessonOff; // chiếu PDF thì bài giảng dừng
+    const p3 = nextEvent(ss, 'pdf:state', (p) => p && p.page === 3);
+    ts.emit('pdf:goto', { page: 3 });
+    assert.equal((await p3).page, 3);
+    ss.emit('pdf:goto', { page: 9 }); // học sinh không điều khiển được
+    await sleep(150);
+    const stopped = nextEvent(ss, 'pdf:state', (p) => p === null);
+    const lessonOn = nextEvent(ss, 'lesson:state', (s) => s && s.id === lessonId);
+    assert.ok((await emit(ts, 'lesson:present', { lessonId })).ok);
+    await stopped; // chiếu bài giảng thì PDF dừng
+    await lessonOn;
+    assert.equal((await api(S1, 'DELETE', `/api/pdfs/${rec.id}`)).status, 403);
+    assert.equal((await api(T, 'DELETE', `/api/pdfs/${rec.id}`)).status, 200);
+    // khôi phục hoạt động đã chốt cho kiểm tra sau
+    emit(ts, 'slide:goto', { index: quizIdx });
+    await sleep(100);
+    ts.emit('activity:start');
+    await sleep(100);
+    ts.emit('activity:end');
+    await sleep(150);
+  });
+  await test('phòng nhỏ: chia nhóm, chỉ nhóm mình trao đổi tín hiệu, giáo viên đi tuần, kết thúc', async () => {
+    assert.ok((await emit(ts, 'breakout:start', { size: 2 })).error, 'một học sinh thì chưa chia nhóm được');
+    const s2b = await connect(S2);
+    await emit(s2b, 'room:join', { classId: ielts.id });
+    assert.ok((await emit(ss, 'breakout:start', { size: 2 })).error, 'học sinh không chia nhóm được');
+    const a1 = nextEvent(ss, 'breakout:assigned');
+    const a2 = nextEvent(s2b, 'breakout:assigned');
+    const st = nextEvent(ts, 'breakout:state', (b) => b && b.groups.length === 1);
+    assert.ok((await emit(ts, 'breakout:start', { size: 2, minutes: 5 })).ok);
+    const [g1, g2] = [await a1, await a2];
+    assert.equal(g1.groupId, g2.groupId);
+    assert.equal(g1.members.length, 2);
+    assert.ok(g1.endsInMs > 250000);
+    assert.equal((await st).groups[0].members.length, 2);
+    // tín hiệu giữa hai thành viên được chuyển; tới giáo viên (chưa ghé thăm) thì bị chặn
+    const sig = nextEvent(s2b, 'bo:signal');
+    ss.emit('bo:signal', { to: s2b.id, data: { hello: 1 } });
+    assert.deepEqual((await sig).data, { hello: 1 });
+    let blocked = true;
+    ts.once('bo:signal', () => (blocked = false));
+    ss.emit('bo:signal', { to: ts.id, data: { sneaky: 1 } });
+    await sleep(250);
+    assert.equal(blocked, true);
+    // giáo viên đi tuần: các học sinh nhận thông báo, tín hiệu hai chiều được phép
+    const v1 = nextEvent(ss, 'breakout:visitor');
+    const visit = await emit(ts, 'breakout:visit', { groupId: g1.groupId });
+    assert.ok(visit.ok);
+    assert.equal(visit.members.length, 2);
+    assert.equal((await v1).socketId, ts.id);
+    const toT = nextEvent(ts, 'bo:signal');
+    ss.emit('bo:signal', { to: ts.id, data: { fromStudent: 1 } });
+    assert.deepEqual((await toT).data, { fromStudent: 1 });
+    const toS = nextEvent(ss, 'bo:signal');
+    ts.emit('bo:signal', { to: ss.id, data: { fromTeacher: 1 } });
+    assert.deepEqual((await toS).data, { fromTeacher: 1 });
+    // thành viên rời -> nhóm được báo
+    const s2bId = s2b.id;
+    const left = nextEvent(ss, 'breakout:member-left');
+    s2b.close();
+    assert.equal((await left).socketId, s2bId);
+    const ended = nextEvent(ss, 'breakout:ended');
+    ts.emit('breakout:end');
+    await ended;
+  });
   await test('học sinh vào muộn nhận đúng trạng thái; kết thúc buổi lưu điểm', async () => {
     ss.close();
     const s2 = await connect(S1);
@@ -237,10 +487,35 @@ async function main() {
     assert.ok(c.history[0].scores[0].points > 0);
   });
 
+  console.log('Bản ghi buổi học');
+  await test('giáo viên tải bản ghi, thành viên lớp xem được qua token, người ngoài lớp không', async () => {
+    const body = Buffer.alloc(20000, 7);
+    const up = await fetch(BASE + `/api/classes/${ielts.id}/recordings`, { method: 'POST', headers: { Authorization: 'Bearer ' + T, 'X-Title': encodeURIComponent('Buổi 1'), 'X-Duration': '95' }, body });
+    assert.equal(up.status, 200);
+    const rec = (await up.json()).recording;
+    assert.equal(rec.size, 20000);
+    assert.equal(rec.durationSec, 95);
+    const list = (await api(S1, 'GET', `/api/classes/${ielts.id}/recordings`)).body.recordings;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].title, 'Buổi 1');
+    const file = await fetch(BASE + `/api/recordings/${rec.id}/file?token=${S1}`);
+    assert.equal(file.status, 200);
+    assert.equal((await file.arrayBuffer()).byteLength, 20000);
+    assert.equal((await fetch(BASE + `/api/recordings/${rec.id}/file?token=${S3}`)).status, 404);
+    assert.equal((await fetch(BASE + `/api/recordings/${rec.id}/file`)).status, 401);
+    assert.equal((await api(S3, 'GET', `/api/classes/${ielts.id}/recordings`)).status, 403);
+    const tiny = await fetch(BASE + `/api/classes/${ielts.id}/recordings`, { method: 'POST', headers: { Authorization: 'Bearer ' + T }, body: Buffer.alloc(10) });
+    assert.equal(tiny.status, 400);
+    assert.equal((await fetch(BASE + `/api/classes/${ielts.id}/recordings`, { method: 'POST', headers: { Authorization: 'Bearer ' + S1 }, body })).status, 403);
+    assert.equal((await api(S1, 'DELETE', `/api/recordings/${rec.id}`)).status, 403);
+    assert.equal((await api(T, 'DELETE', `/api/recordings/${rec.id}`)).status, 200);
+    assert.equal((await api(S1, 'GET', `/api/classes/${ielts.id}/recordings`)).body.recordings.length, 0);
+  });
+
   console.log('Hỏi đáp sau buổi học');
   await test('danh sách bài đã gắn lớp + chat theo bài, có đáp án vì đã dạy; lưu & xoá lịch sử', async () => {
     const l = (await api(S1, 'GET', `/api/classes/${ielts.id}/lessons`)).body;
-    assert.equal(l.lessons.length, 1);
+    assert.equal(l.lessons.length, 2); // bài chính + bài trò chơi đã chiếu trong lớp
     assert.ok(l.lessons[0].taught);
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, lessonId: lessonId, message: 'Tóm tắt bài giúp em' });
     assert.equal(r.status, 200, JSON.stringify(r.body));

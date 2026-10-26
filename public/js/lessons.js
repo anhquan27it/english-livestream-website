@@ -1,9 +1,10 @@
 // Lesson Studio: tạo bài giảng từ PDF/văn bản bằng AI, duyệt outline, chỉnh sửa slide & trò chơi, lưu.
 const me = Auth.require('teacher');
 const view = document.getElementById('view');
-const TYPE_LABEL = { slide: 'Slide', quiz: 'Quiz', poll: 'Poll', match: 'Ghép cặp', order: 'Xếp câu' };
-const TYPE_ICON = { slide: '📘', quiz: '❓', poll: '📊', match: '🔗', order: '🔤' };
+const TYPE_LABEL = { slide: 'Slide', quiz: 'Quiz', poll: 'Poll', match: 'Ghép cặp', order: 'Xếp câu', fill: 'Điền từ', speak: 'Đọc to' };
+const TYPE_ICON = { slide: '📘', quiz: '❓', poll: '📊', match: '🔗', order: '🔤', fill: '✏️', speak: '🎤' };
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const LAYOUT_LABEL = { bullets: 'Ý chính', rule: 'Quy tắc ngữ pháp', table: 'Bảng', dialogue: 'Hội thoại', passage: 'Bài đọc', vocab: 'Từ vựng' };
 
 let classes = [];
 let lesson = null;      // bài đang mở (bản đầy đủ)
@@ -131,6 +132,11 @@ async function viewNew() {
       try {
         await api(`/api/lessons/${l.id}/outline`, { method: 'POST', body: {} });
       } catch (e2) {
+        // Nội dung không phải tiếng Anh: xoá bản nháp và ở lại form để sửa yêu cầu
+        if (e2.message.startsWith('Nội dung này không phải')) {
+          await api('/api/lessons/' + l.id, { method: 'DELETE' }).catch(() => {});
+          throw e2;
+        }
         toast('Bài giảng đã được tạo nhưng AI chưa lập được outline: ' + e2.message, 'error');
       }
       location.hash = `#/l/${l.id}`;
@@ -189,11 +195,13 @@ function viewOutline() {
         <input class="input" data-f="title" value="${esc(r.title)}" placeholder="Tiêu đề" />
         <div style="display:flex"><button class="icon-btn" data-mv="-1" title="Lên"><i data-lucide="arrow-up"></i></button><button class="icon-btn" data-mv="1" title="Xuống"><i data-lucide="arrow-down"></i></button><button class="icon-btn" data-rm title="Xoá"><i data-lucide="x"></i></button></div>
         <input class="input goal" data-f="goal" value="${esc(r.goal)}" placeholder="Mục tiêu của slide này" />
+        <div class="meta">${r.type === 'slide' ? `<select class="input" data-f="layout" title="Bố cục slide">${Object.entries(LAYOUT_LABEL).map(([k, v]) => `<option value="${k}" ${(r.layout || 'bullets') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` : ''}<input class="input" data-src value="${esc((r.source || []).join(', '))}" placeholder="📎 Phần tài liệu (VD: Page 2, Page 3)" title="Phần của tài liệu mà slide này dựa vào" /></div>
       </div>`).join('');
     icons();
     rows.querySelectorAll('.outline-row').forEach((el) => {
       const i = +el.dataset.i;
       el.querySelectorAll('[data-f]').forEach((inp) => (inp.oninput = inp.onchange = () => (o[i][inp.dataset.f] = inp.value)));
+      el.querySelectorAll('[data-src]').forEach((inp) => (inp.oninput = () => (o[i].source = inp.value.split(',').map((x) => x.trim()).filter(Boolean))));
       el.querySelectorAll('[data-mv]').forEach((b) => (b.onclick = () => { const j = i + +b.dataset.mv; if (j >= 0 && j < o.length) { [o[i], o[j]] = [o[j], o[i]]; paint(); } }));
       el.querySelector('[data-rm]').onclick = () => { o.splice(i, 1); paint(); document.getElementById('go').disabled = !o.length; };
     });
@@ -241,15 +249,23 @@ function problem(sc) {
   }
   if (sc.type === 'match' && sc.pairs.filter((p) => p.left.trim() && p.right.trim()).length < 3) return 'Cần ít nhất 3 cặp';
   if (sc.type === 'order' && sc.sentence.trim().split(/\s+/).length < 3) return 'Câu cần ít nhất 3 từ';
+  if (sc.type === 'fill') {
+    const blanks = (sc.sentence.match(/_{3,}/g) || []).length;
+    if (!blanks) return 'Câu cần có chỗ trống ___';
+    if (sc.answers.length !== blanks) return `Có ${blanks} chỗ trống nhưng ${sc.answers.length} đáp án`;
+  }
+  if (sc.type === 'speak' && sc.sentence.trim().split(/\s+/).length < 2) return 'Câu cần ít nhất 2 từ';
   return null;
 }
 
 const blank = {
-  slide: () => ({ id: uid(), type: 'slide', title: 'New slide', emoji: '📘', bullets: [''], vocab: [], note: '' }),
+  slide: () => ({ id: uid(), type: 'slide', title: 'New slide', emoji: '📘', layout: 'bullets', passage: '', rule: null, dialogue: [], table: null, bullets: [''], vocab: [], note: '' }),
   quiz: () => ({ id: uid(), type: 'quiz', title: 'Quiz', question: '', options: ['', '', '', ''], answer: 0, explanation: '', note: '' }),
   poll: () => ({ id: uid(), type: 'poll', title: 'Poll', question: '', options: ['', '', ''], note: '' }),
   match: () => ({ id: uid(), type: 'match', title: 'Matching game', instruction: 'Match each item on the left with its meaning.', pairs: [{ left: '', right: '' }, { left: '', right: '' }, { left: '', right: '' }], note: '' }),
   order: () => ({ id: uid(), type: 'order', title: 'Word order', sentence: '', translation: '', note: '' }),
+  fill: () => ({ id: uid(), type: 'fill', title: 'Fill in the blank', sentence: 'I ___ to school yesterday.', answers: [['went']], hint: '', translation: '', note: '' }),
+  speak: () => ({ id: uid(), type: 'speak', title: 'Read aloud', sentence: '', translation: '', ipa: '', note: '' }),
 };
 
 function viewEditor() {
@@ -316,9 +332,15 @@ function paintForm() {
     <textarea class="input sm" id="aiInst" rows="2" placeholder="VD: Làm dễ hơn cho A2, thêm 2 ví dụ, đổi chủ đề sang khách sạn…"></textarea>
     <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-primary btn-sm" id="aiGo"><i data-lucide="wand-sparkles"></i> Sinh lại</button>
     <select class="input sm" id="aiType" style="width:auto" title="Đổi loại slide">${Object.keys(TYPE_LABEL).map((t) => `<option value="${t}" ${t === s.type ? 'selected' : ''}>${TYPE_LABEL[t]}</option>`).join('')}</select></div></div>`;
-  let body = `<div class="field"><label>Tiêu đề</label><input class="input sm" data-k="title" value="${val(s.title)}" /></div>`;
+  let body = `${s.source ? `<div style="margin-bottom:10px"><span class="src-chip" title="Phần tài liệu AI dùng để viết slide này">📎 Nguồn: ${val(s.source)}</span></div>` : ''}<div class="field"><label>Tiêu đề</label><input class="input sm" data-k="title" value="${val(s.title)}" /></div>`;
   if (s.type === 'slide') {
-    body += `<div class="field"><label>Emoji</label><input class="input sm" data-k="emoji" value="${val(s.emoji)}" style="width:80px" /></div>
+    const tableText = s.table ? [s.table.headers.join(' | '), ...s.table.rows.map((r) => r.join(' | '))].join('\n') : '';
+    body += `<div class="grid-2" style="gap:8px"><div class="field"><label>Emoji</label><input class="input sm" data-k="emoji" value="${val(s.emoji)}" style="width:80px" /></div>
+      <div class="field"><label>Bố cục</label><select class="input sm" data-layout>${Object.entries(LAYOUT_LABEL).map(([k, v]) => `<option value="${k}" ${s.layout === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
+      ${s.layout === 'passage' || s.passage ? `<div class="field"><label>Bài đọc (đặt **từ khoá** trong dấu ** để tô sáng)</label><textarea class="input sm" rows="6" data-k="passage">${val(s.passage)}</textarea></div>` : ''}
+      ${s.layout === 'rule' || s.rule ? `<div class="field"><label>Quy tắc ngữ pháp</label><input class="input sm" data-rule="name" value="${val(s.rule && s.rule.name)}" placeholder="Tên, VD: Past Simple" style="margin-bottom:6px" /><input class="input sm" data-rule="formula" value="${val(s.rule && s.rule.formula)}" placeholder="Công thức, VD: S + V2/ed" style="margin-bottom:6px" /><textarea class="input sm" rows="2" data-rule="explanation" placeholder="Giải thích ngắn" style="margin-bottom:6px">${val(s.rule && s.rule.explanation)}</textarea><textarea class="input sm" rows="3" data-ruleex placeholder="Mỗi dòng một câu ví dụ">${val(s.rule ? s.rule.examples.join('\n') : '')}</textarea></div>` : ''}
+      ${s.layout === 'table' || s.table ? `<div class="field"><label>Bảng (dòng đầu là tiêu đề cột, các ô cách nhau bằng dấu |)</label><textarea class="input sm" rows="5" data-table placeholder="Subject | Verb | Example&#10;I | go | I go to school">${val(tableText)}</textarea></div>` : ''}
+      ${s.layout === 'dialogue' || (s.dialogue && s.dialogue.length) ? `<div class="field"><label>Hội thoại</label>${(s.dialogue || []).map((d, i) => `<div class="mini-row v" style="grid-template-columns:70px 1fr auto"><input class="input sm" data-dl="speaker" data-i="${i}" value="${val(d.speaker)}" placeholder="A" /><input class="input sm" data-dl="text" data-i="${i}" value="${val(d.text)}" placeholder="Lời thoại" /><button class="icon-btn" data-rm="dialogue" data-i="${i}"><i data-lucide="x"></i></button></div>`).join('')}<button class="btn btn-outline btn-sm" data-add="dialogue">+ Thêm câu thoại</button></div>` : ''}
       <div class="field"><label>Ý chính</label>${s.bullets.map((b, i) => `<div class="mini-row"><input class="input sm" data-arr="bullets" data-i="${i}" value="${val(b)}" /><button class="icon-btn" data-rm="bullets" data-i="${i}"><i data-lucide="x"></i></button></div>`).join('')}<button class="btn btn-outline btn-sm" data-add="bullets">+ Thêm ý</button></div>
       <div class="field"><label>Từ vựng</label>${s.vocab.map((v, i) => `<div style="border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:6px"><div class="mini-row v"><input class="input sm" data-v="word" data-i="${i}" value="${val(v.word)}" placeholder="word" /><input class="input sm" data-v="ipa" data-i="${i}" value="${val(v.ipa)}" placeholder="/ipa/" /><button class="icon-btn" data-rm="vocab" data-i="${i}"><i data-lucide="x"></i></button></div>
         <input class="input sm" data-v="meaning" data-i="${i}" value="${val(v.meaning)}" placeholder="nghĩa tiếng Việt" style="margin-bottom:6px" /><input class="input sm" data-v="example" data-i="${i}" value="${val(v.example)}" placeholder="câu ví dụ" /></div>`).join('')}<button class="btn btn-outline btn-sm" data-add="vocab">+ Thêm từ</button></div>`;
@@ -329,6 +351,14 @@ function paintForm() {
   } else if (s.type === 'match') {
     body += `<div class="field"><label>Hướng dẫn</label><input class="input sm" data-k="instruction" value="${val(s.instruction)}" /></div>
       <div class="field"><label>Các cặp (trái ↔ phải)</label>${s.pairs.map((p, i) => `<div class="mini-row v"><input class="input sm" data-p="left" data-i="${i}" value="${val(p.left)}" placeholder="trái" /><input class="input sm" data-p="right" data-i="${i}" value="${val(p.right)}" placeholder="phải" /><button class="icon-btn" data-rm="pairs" data-i="${i}"><i data-lucide="x"></i></button></div>`).join('')}${s.pairs.length < 8 ? '<button class="btn btn-outline btn-sm" data-add="pairs">+ Thêm cặp</button>' : ''}</div>`;
+  } else if (s.type === 'fill') {
+    body += `<div class="field"><label>Câu có chỗ trống (dùng ___ cho mỗi chỗ trống, tối đa 4)</label><textarea class="input sm" rows="2" data-k="sentence">${val(s.sentence)}</textarea></div>
+      <div class="field"><label>Đáp án — mỗi dòng một chỗ trống; nhiều đáp án chấp nhận cách nhau bằng dấu /</label><textarea class="input sm" rows="3" data-fillans placeholder="went&#10;did not go / didn't go">${val(s.answers.map((a) => a.join(' / ')).join('\n'))}</textarea></div>
+      <div class="field"><label>Gợi ý (tuỳ chọn)</label><input class="input sm" data-k="hint" value="${val(s.hint)}" /></div>
+      <div class="field"><label>Dịch nghĩa (tuỳ chọn)</label><input class="input sm" data-k="translation" value="${val(s.translation)}" /></div>`;
+  } else if (s.type === 'speak') {
+    body += `<div class="field"><label>Câu học sinh đọc to (chấm bằng nhận dạng giọng nói, cần Chrome/Edge)</label><textarea class="input sm" rows="2" data-k="sentence">${val(s.sentence)}</textarea></div>
+      <div class="field"><label>Dịch nghĩa (tuỳ chọn)</label><input class="input sm" data-k="translation" value="${val(s.translation)}" /></div>`;
   } else {
     body += `<div class="field"><label>Câu hoàn chỉnh (học sinh sẽ xếp lại các từ)</label><textarea class="input sm" rows="2" data-k="sentence">${val(s.sentence)}</textarea></div>
       <div class="field"><label>Dịch nghĩa gợi ý</label><input class="input sm" data-k="translation" value="${val(s.translation)}" /></div>`;
@@ -342,10 +372,26 @@ function paintForm() {
   f.querySelectorAll('[data-arr]').forEach((el) => (el.oninput = () => { s[el.dataset.arr][+el.dataset.i] = el.value; upd(); }));
   f.querySelectorAll('[data-v]').forEach((el) => (el.oninput = () => { s.vocab[+el.dataset.i][el.dataset.v] = el.value; upd(); }));
   f.querySelectorAll('[data-p]').forEach((el) => (el.oninput = () => { s.pairs[+el.dataset.i][el.dataset.p] = el.value; upd(); }));
+  f.querySelectorAll('[data-fillans]').forEach((el) => (el.oninput = () => { s.answers = el.value.split('\n').map((l) => l.split('/').map((x) => x.trim()).filter(Boolean)).filter((a) => a.length); upd(); }));
+  f.querySelectorAll('[data-dl]').forEach((el) => (el.oninput = () => { s.dialogue[+el.dataset.i][el.dataset.dl] = el.value; upd(); }));
+  f.querySelectorAll('[data-rule]').forEach((el) => (el.oninput = () => { s.rule = s.rule || { name: '', formula: '', explanation: '', examples: [] }; s.rule[el.dataset.rule] = el.value; upd(); }));
+  f.querySelectorAll('[data-ruleex]').forEach((el) => (el.oninput = () => { s.rule = s.rule || { name: '', formula: '', explanation: '', examples: [] }; s.rule.examples = el.value.split('\n').filter((x) => x.trim()); upd(); }));
+  f.querySelectorAll('[data-table]').forEach((el) => (el.oninput = () => {
+    const lines = el.value.split('\n').map((l) => l.split('|').map((c) => c.trim())).filter((r) => r.some(Boolean));
+    s.table = lines.length > 1 ? { headers: lines[0], rows: lines.slice(1) } : null;
+    upd();
+  }));
+  f.querySelectorAll('[data-layout]').forEach((el) => (el.onchange = () => {
+    s.layout = el.value;
+    if (s.layout === 'rule' && !s.rule) s.rule = { name: '', formula: '', explanation: '', examples: [] };
+    if (s.layout === 'dialogue' && !(s.dialogue && s.dialogue.length)) s.dialogue = [{ speaker: 'A', text: '' }, { speaker: 'B', text: '' }];
+    touch(); paintForm(); paintPreview();
+  }));
   f.querySelectorAll('[data-ans]').forEach((el) => (el.onchange = () => { s.answer = +el.dataset.ans; upd(); }));
   f.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.add;
     if (k === 'vocab') s.vocab.push({ word: '', ipa: '', meaning: '', example: '' });
+    else if (k === 'dialogue') s.dialogue.push({ speaker: s.dialogue.length % 2 ? 'B' : 'A', text: '' });
     else if (k === 'pairs') s.pairs.push({ left: '', right: '' });
     else s[k].push('');
     touch(); paintForm(); paintPreview();
