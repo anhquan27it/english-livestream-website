@@ -3,3 +3,6 @@
 
 /* Trang admin có 5 ô số liệu: tự chia đều theo bề rộng */
 #stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+.op-toolbar { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 12px; }
+.op-form textarea.input { resize: vertical; }

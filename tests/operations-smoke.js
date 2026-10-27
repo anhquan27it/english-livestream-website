@@ -45,6 +45,30 @@ module.exports = async function(c) {
     assert.ok(!(await api(S3,'GET','/api/learning/reminders')).body.schedules.some(s=>s.id===near.id));
     await api(T,'DELETE','/api/learning/schedules/'+near.id);
   });
+  await test('admin tạo/sửa/xóa lớp và đặt lịch lặp hằng tuần',async()=>{
+    const teacherId=ielts.teacherId;
+    assert.equal((await api(T,'POST','/api/admin/classes',{name:'No',teacherId})).status,403);
+    assert.equal((await api(A,'POST','/api/admin/classes',{teacherId})).status,400);
+    const student=(await api(A,'GET','/api/admin/overview')).body.users.find(u=>u.role==='student');
+    assert.equal((await api(A,'POST','/api/admin/classes',{name:'X',teacherId:student.id})).status,400);
+    const made=await api(A,'POST','/api/admin/classes',{name:'Lớp admin tạo',level:'B2',teacherId,description:'mô tả'});assert.equal(made.status,200);
+    const nc=made.body.class;assert.equal(nc.teacherId,teacherId);assert.equal(nc.level,'B2');assert.ok(nc.code);
+    assert.equal((await api(A,'PATCH','/api/admin/classes/'+nc.id,{level:'C1',description:'đổi'})).body.class.level,'C1');
+    const t0=Date.now()+30*86400000,body={classId:nc.id,title:'Hằng tuần',startsAt:t0,endsAt:t0+3600000};
+    assert.equal((await api(A,'POST','/api/learning/schedules',{...body,repeatWeeks:0})).status,400);
+    const rep=await api(A,'POST','/api/learning/schedules',{...body,repeatWeeks:3});assert.equal(rep.status,200);assert.equal(rep.body.schedules.length,3);
+    assert.equal(rep.body.schedules[1].startsAt-rep.body.schedules[0].startsAt,7*86400000);
+    const count=async()=>(await api(A,'GET','/api/admin/overview')).body.schedules.length;
+    const before=await count();
+    assert.equal((await api(A,'POST','/api/learning/schedules',{...body,title:'Trùng',startsAt:t0+7*86400000,endsAt:t0+7*86400000+1800000})).status,409);
+    assert.equal((await api(A,'POST','/api/learning/schedules',{...body,title:'Lặp trùng',startsAt:t0-7*86400000,endsAt:t0-7*86400000+3600000,repeatWeeks:3})).status,409);
+    assert.equal(await count(),before,'lặp bị trùng không được tạo dở');
+    assert.equal((await api(T,'DELETE','/api/admin/classes/'+nc.id)).status,403);
+    assert.equal((await api(A,'DELETE','/api/admin/classes/'+nc.id)).status,200);
+    const after=(await api(A,'GET','/api/admin/overview')).body;
+    assert.ok(!after.classes.some(x=>x.id===nc.id));assert.ok(!after.schedules.some(s=>s.classId===nc.id));
+    assert.equal((await api(A,'DELETE','/api/admin/classes/'+nc.id)).status,404);
+  });
   await test('giao/nộp/chấm bài, bảo vệ bài làm và điểm',async()=>{
     const created=await api(assistantToken,'POST','/api/learning/assignments',{classId:ielts.id,title:'My day',prompt:'Write about your day.',dueAt:Date.now()+3600000});assert.equal(created.status,200);assignment=created.body.assignment;
     const sent=await api(S1,'POST','/api/learning/assignments/'+assignment.id+'/submit',{content:'I went to school.'});assert.equal(sent.status,200);submission=sent.body.submission;

@@ -15,7 +15,7 @@ function createRouter(ctx) {
   r.use('/api/admin', auth('admin'));
   const safeUser = u => ({ ...publicUser(u), createdAt: u.createdAt });
   r.get('/api/admin/overview', async (req, res) => res.json({
-    users: db.users.map(safeUser), classes: db.classes,
+    users: db.users.map(safeUser), classes: db.classes, schedules: [...db.schedules].sort((a, b) => a.startsAt - b.startsAt),
     lives: [...lives].map(([classId, l]) => ({ classId, title: l.title, startedAt: l.startedAt, viewers: l.viewers.size, recovered: !!l.recovered })),
     limits: db.settings.limits, storageBytes: storageBytes(), livekit: { enabled: lk.enabled, url: lk.enabled ? lk.config.publicUrl : null, stats: await lk.stats() },
     usage: db.aiUsage, audit: db.audit.slice(0, 100), recordings: db.recordings.map(({ file, ...x }) => x), pdfs: db.pdfs,
@@ -40,6 +40,32 @@ function createRouter(ctx) {
     if (typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'Mật khẩu cần 8–128 ký tự.' });
     u.password = store.hashPassword(password); revokeUser(u.id); store.audit(req.user, 'user.password.reset', u.id); res.json({ ok: true });
   });
+  const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'IELTS', 'TOEIC', 'Kids'], COLORS = ['violet', 'orange', 'teal', 'pink', 'blue'];
+  const validTeacher = id => { const t = db.users.find(u => u.id === id); return active(t) && ['teacher', 'admin'].includes(t.role) ? t : null; };
+  // Admin tạo lớp và giao luôn cho một giáo viên
+  r.post('/api/admin/classes', (req, res) => {
+    const b = req.body || {}, name = text(b.name, 120), t = validTeacher(b.teacherId);
+    if (!name) return res.status(400).json({ error: 'Vui lòng nhập tên lớp.' });
+    if (!t) return res.status(400).json({ error: 'Hãy chọn giáo viên phụ trách (đang hoạt động).' });
+    const c = {
+      id: store.id('c'), name, level: LEVELS.includes(b.level) ? b.level : 'A1', description: text(b.description, 500),
+      color: COLORS.includes(b.color) ? b.color : COLORS[db.classes.length % COLORS.length], code: store.classCode(),
+      teacherId: t.id, assistantIds: [], studentIds: [], pendingIds: [], history: [], createdAt: Date.now(),
+    };
+    db.classes.push(c); store.audit(req.user, 'class.create', c.id, c.name); notifyClass(c); res.json({ class: c });
+  });
+  // Xoá lớp: kết thúc buổi live, xoá lịch/bài tập/bài nộp/kết quả của lớp. Bản ghi và PDF giữ lại (xoá ở mục Tài liệu & bản ghi).
+  r.delete('/api/admin/classes/:id', (req, res) => {
+    const c = findClass(req.params.id); if (!c) return res.status(404).json({ error: 'Không có lớp.' });
+    endLive(c, 'Lớp học đã bị xoá.');
+    const aIds = new Set(db.assignments.filter(a => a.classId === c.id).map(a => a.id));
+    db.schedules = db.schedules.filter(s => s.classId !== c.id);
+    db.assignments = db.assignments.filter(a => a.classId !== c.id);
+    db.submissions = db.submissions.filter(s => !aIds.has(s.assignmentId));
+    db.activityResults = db.activityResults.filter(a => a.classId !== c.id);
+    db.classes = db.classes.filter(x => x !== c);
+    store.audit(req.user, 'class.delete', c.id, c.name); notifyClass(c); res.json({ ok: true });
+  });
   r.patch('/api/admin/classes/:id', (req, res) => {
     const original = findClass(req.params.id), b = req.body || {};
     if (!original) return res.status(404).json({ error: 'Không có lớp.' });
@@ -57,6 +83,8 @@ function createRouter(ctx) {
       c.assistantIds = [...new Set(b.assistantIds)];
     }
     if (b.name !== undefined && text(b.name)) c.name = text(b.name, 120);
+    if (b.level !== undefined && LEVELS.includes(b.level)) c.level = b.level;
+    if (b.description !== undefined) c.description = text(b.description, 500);
     if (b.studentIds !== undefined) {
       if (!Array.isArray(b.studentIds) || b.studentIds.some(id => !db.users.some(u => u.id === id && active(u) && u.role === 'student'))) return res.status(400).json({ error: 'Danh sách học sinh không hợp lệ.' });
       c.studentIds = [...new Set(b.studentIds)]; c.pendingIds = c.pendingIds.filter(id => !c.studentIds.includes(id));
@@ -110,8 +138,15 @@ function createRouter(ctx) {
     const c = classManager(req, res); if (!c) return;
     const b = req.body || {}, startsAt = Number(b.startsAt), endsAt = Number(b.endsAt), title = text(b.title, 120);
     if (!title || !Number.isFinite(startsAt) || !Number.isFinite(endsAt) || startsAt < Date.now() - 60000 || endsAt <= startsAt || endsAt - startsAt > 86400000) return res.status(400).json({ error: 'Tên và thời gian học không hợp lệ (tối đa 24 giờ).' });
-    if (db.schedules.some(s => s.startsAt < endsAt && startsAt < s.endsAt && (s.classId === c.id || findClass(s.classId)?.teacherId === c.teacherId))) return res.status(409).json({ error: 'Trùng lịch lớp hoặc giáo viên.' });
-    const schedule = { id: store.id('sch'), classId: c.id, title, startsAt, endsAt }; db.schedules.push(schedule); store.audit(req.user, 'schedule.create', schedule.id); res.json({ schedule });
+    const weeks = b.repeatWeeks === undefined ? 1 : Number(b.repeatWeeks);
+    if (!Number.isInteger(weeks) || weeks < 1 || weeks > 26) return res.status(400).json({ error: 'Số tuần lặp phải từ 1 đến 26.' });
+    const WEEK = 7 * 86400000, made = [];
+    for (let i = 0; i < weeks; i++) {
+      const s0 = startsAt + i * WEEK, e0 = endsAt + i * WEEK;
+      if (db.schedules.some(s => s.startsAt < e0 && s0 < s.endsAt && (s.classId === c.id || findClass(s.classId)?.teacherId === c.teacherId))) return res.status(409).json({ error: weeks > 1 ? 'Trùng lịch lớp hoặc giáo viên ở tuần thứ ' + (i + 1) + '; chưa tạo lịch nào.' : 'Trùng lịch lớp hoặc giáo viên.' });
+      made.push({ id: store.id('sch'), classId: c.id, title, startsAt: s0, endsAt: e0 });
+    }
+    db.schedules.push(...made); made.forEach(s => store.audit(req.user, 'schedule.create', s.id)); res.json({ schedule: made[0], schedules: made });
   });
   r.delete('/api/learning/schedules/:id', (req, res) => {
     const s = db.schedules.find(s => s.id === req.params.id), c = s && findClass(s.classId);

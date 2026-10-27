@@ -1,6 +1,6 @@
 # CLAUDE.md — hướng dẫn cho Claude khi làm việc trong repo này
 
-**Bản nâng cấp 2026-10-26:** đọc mục *Cập nhật mới nhất* đầu PROJECT.md. Có admin/assistant, AI settings chỉ admin; bootstrap bằng `npm run admin:create -- email` **khi server đã dừng**. JSON vẫn dùng nhưng có writer lock, backup và snapshot. Có `/admin.html`, `/learning.html`, `/devices.html`; `npm test` mở rộng 55 ca, `npm run test:load` chỉ đo Socket.IO, `npm run dev:qa` cổng 3101 với data tạm. Những dòng 35 test/2 vai trò phía dưới là mô tả lịch sử; cập nhật mới nhất có ưu tiên.
+**Bản nâng cấp 2026-10-26:** đọc mục *Cập nhật mới nhất* đầu PROJECT.md. Có admin/assistant, AI settings chỉ admin; bootstrap bằng `npm run admin:create -- email` **khi server đã dừng**. JSON vẫn dùng nhưng có writer lock, backup và snapshot. Có `/admin.html`, `/learning.html`, `/devices.html`; `npm test` mở rộng 56 ca, `npm run test:load` chỉ đo Socket.IO, `npm run dev:qa` cổng 3101 với data tạm. Những dòng 35 test/2 vai trò phía dưới là mô tả lịch sử; cập nhật mới nhất có ưu tiên.
 
 **Đọc [PROJECT.md](PROJECT.md) trước**: bối cảnh người dùng, kiến trúc, tiến độ, trạng thái hiện tại, việc đang chờ và nhật ký.
 Sau mỗi phiên làm việc, cập nhật *Trạng thái hiện tại*, *Tiến độ* và *Nhật ký* trong PROJECT.md (và mục này nếu quy ước đổi).

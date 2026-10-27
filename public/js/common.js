@@ -193,7 +193,11 @@ async function openRecordings(classId, canDelete) {
 // Thanh bên dùng chung cho các trang giáo viên / học sinh
 function buildSidebar(role, active) {
   const isAdmin = Auth.user && Auth.user.role === 'admin';
-  const nav = isAdmin ? [['admin', '/admin.html', 'shield-check', 'Quản trị'], ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI']] : role === 'teacher'
+  const nav = isAdmin ? [
+    ['overview', '/admin.html#overview', 'layout-dashboard', 'Tổng quan'], ['users', '/admin.html#users', 'users', 'Tài khoản'], ['classes', '/admin.html#classes', 'school', 'Lớp học'], ['schedule', '/admin.html#schedule', 'calendar-days', 'Thời khóa biểu'],
+    ['media', '/admin.html#media', 'folder-open', 'Tài liệu & bản ghi'], ['settings', '/admin.html#settings', 'settings', 'Hệ thống'], ['audit', '/admin.html#audit', 'scroll-text', 'Nhật ký'],
+    ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI'],
+  ] : role === 'teacher'
     ? [['overview', '/teacher.html', 'layout-dashboard', 'Tổng quan'], ['lessons', '/lessons.html', 'presentation', 'Bài giảng']]
     : [['home', '/student.html', 'house', 'Trang chủ'], ['tutor', '/tutor.html', 'bot', 'Hỏi đáp AI']];
   if (!isAdmin) nav.push(['learning', '/learning.html', 'calendar-days', 'Học tập & lịch học'], ['devices', '/devices.html', 'video', 'Kiểm tra thiết bị']);
