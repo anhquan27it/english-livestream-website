@@ -133,12 +133,24 @@ const LiveKitLive = (() => {
   }
 
   // ----- Giáo viên phát -----
-  const cam = { simulcast: true, videoEncoding: { maxBitrate: 1500000, maxFramerate: 25 } };
+  let camEnc = { maxBitrate: 1500000, maxFramerate: 25 };
+  const cam = () => ({ simulcast: true, videoEncoding: camEnc });
+
+  // Đổi chất lượng camera: đặt mức bitrate/khung hình cho lần phát tới, và phát lại ngay nếu đang phát camera
+  async function setCameraQuality({ maxBitrate, maxFramerate }) {
+    camEnc = { maxBitrate, maxFramerate };
+    const lp = room && room.localParticipant;
+    if (!lp || !camPub || !camPub.track) return;
+    const track = camPub.track, wasMuted = camPub.isMuted;
+    await lp.unpublishTrack(track, false);
+    camPub = await lp.publishTrack(track, { source: Source().Camera, name: 'camera', ...cam() });
+    if (wasMuted) await camPub.mute();
+  }
 
   async function publishTeacher({ audioTrack, videoTrack }) {
     const lp = room.localParticipant;
     if (audioTrack) micPub = await lp.publishTrack(audioTrack, { source: Source().Microphone, name: 'mic' });
-    if (videoTrack) camPub = await lp.publishTrack(videoTrack, { source: Source().Camera, name: 'camera', ...cam });
+    if (videoTrack) camPub = await lp.publishTrack(videoTrack, { source: Source().Camera, name: 'camera', ...cam() });
   }
 
   async function toggleLocal(kind) {
@@ -228,7 +240,7 @@ const LiveKitLive = (() => {
   }
 
   return {
-    isEnabled, connect, disconnect, setMuted, publishTeacher, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
+    isEnabled, connect, disconnect, setMuted, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
     startSpeaking, stopSpeaking, setSpeakerMuted, joinGroup,
     audioTrackOf: (identity) => audioByUser.get(identity) || null,
     get room() { return room; },

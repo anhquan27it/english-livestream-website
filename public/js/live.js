@@ -162,6 +162,33 @@ function fakeAudio(freq) {
   return dest.stream.getAudioTracks()[0];
 }
 
+// Chất lượng camera giáo viên (gói LiveKit miễn phí có hạn mức băng thông: mức thấp hơn tiết kiệm hơn)
+const CAM_QUALITY = {
+  low: { label: 'Tiết kiệm', w: 640, h: 360, fps: 15, bitrate: 400000, note: '360p · khoảng 0,2 GB/giờ cho mỗi học sinh' },
+  medium: { label: 'Cân bằng', w: 854, h: 480, fps: 24, bitrate: 800000, note: '480p · khoảng 0,35 GB/giờ cho mỗi học sinh' },
+  high: { label: 'Cao', w: 1280, h: 720, fps: 25, bitrate: 1500000, note: '720p · khoảng 0,7 GB/giờ cho mỗi học sinh' },
+};
+function camQualityKey() {
+  try { const k = localStorage.getItem('englive_cam_quality'); return CAM_QUALITY[k] ? k : 'high'; } catch { return 'high'; }
+}
+async function setCamQuality(key) {
+  const q = CAM_QUALITY[key]; if (!q) return;
+  try { localStorage.setItem('englive_cam_quality', key); } catch {}
+  const vt = camStream && camStream.getVideoTracks()[0];
+  // Camera thật: đổi độ phân giải/khung hình tại nguồn (ảnh hưởng cả P2P lẫn LiveKit)
+  if (vt && !usingFallback) { try { await vt.applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } }); } catch { /* camera không hỗ trợ: giữ nguyên */ } }
+  if (LK && typeof LiveKitLive !== 'undefined') { try { await LiveKitLive.setCameraQuality({ maxBitrate: q.bitrate, maxFramerate: q.fps }); } catch (e) { toast('Không đổi được chất lượng: ' + e.message, 'error'); return; } }
+  toast('Chất lượng camera: ' + q.label + ' (' + q.note + ')');
+  renderControls();
+}
+function qualityModal() {
+  const cur = camQualityKey();
+  const m = openModal(`<h3>Chất lượng camera</h3><p class="sub">Chọn thấp hơn để tiết kiệm băng thông (hạn mức LiveKit) và giúp học sinh mạng yếu xem mượt hơn. Đổi được ngay trong lúc đang dạy.</p>
+    <div class="stack">${Object.entries(CAM_QUALITY).map(([k, q]) => `<label class="field" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="radio" name="camq" value="${k}" ${k === cur ? 'checked' : ''} style="margin-top:4px"><span><b>${q.label}</b><br><small>${q.note}</small></span></label>`).join('')}</div>
+    <p class="sub" style="margin-top:10px"><small>Chia sẻ màn hình dùng mức riêng. Slide đi qua kết nối điều khiển nên không tốn băng thông video.</small></p>`);
+  m.querySelectorAll('input[name="camq"]').forEach((r) => (r.onchange = () => { setCamQuality(r.value); m.close && m.close(); }));
+}
+
 async function startMedia() {
   if (FAKE_MIC) {
     usingFallback = true;
@@ -172,7 +199,7 @@ async function startMedia() {
     return;
   }
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, ...devicePreferences('camera') }, audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: CAM_QUALITY[camQualityKey()].w }, height: { ideal: CAM_QUALITY[camQualityKey()].h }, frameRate: { ideal: CAM_QUALITY[camQualityKey()].fps }, ...devicePreferences('camera') }, audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
   } catch {
     // Không có camera: dùng micro (nếu có) + màn hình chờ vẽ bằng canvas
     usingFallback = true;
@@ -429,6 +456,7 @@ function renderControls() {
     box.innerHTML =
       ctrl('cMic', micOn ? 'mic' : 'mic-off', micOn ? 'Micro' : 'Đã tắt mic', micOn ? '' : 'off') +
       ctrl('cCam', camOn ? 'video' : 'video-off', camOn ? 'Camera' : 'Đã tắt cam', camOn ? '' : 'off') +
+      ctrl('cQuality', 'gauge', 'Chất lượng: ' + CAM_QUALITY[camQualityKey()].label) +
       ctrl('cScreen', screenTrack ? 'monitor-off' : 'monitor-up', screenTrack ? 'Dừng chia sẻ' : 'Chia sẻ màn hình', screenTrack ? 'on' : '') +
       ctrl('cListen', 'headphones', 'Phát file nghe', listenEl ? 'on' : '') +
       ctrl('cRec', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi hình', rec ? 'danger' : '') +
@@ -438,6 +466,7 @@ function renderControls() {
       ctrl('cEnd', 'square', 'Kết thúc', 'danger');
     $('cMic').onclick = () => toggleTrack('audio');
     $('cCam').onclick = () => toggleTrack('video');
+    $('cQuality').onclick = qualityModal;
     $('cScreen').onclick = toggleScreen;
     $('cWord').onclick = wordModal;
     $('cListen').onclick = listenModal;
@@ -979,6 +1008,8 @@ function lkHandlers() {
 
 async function connectLiveKitTeacher() {
   await LiveKitLive.connect(lkHandlers());
+  const q = CAM_QUALITY[camQualityKey()];
+  await LiveKitLive.setCameraQuality({ maxBitrate: q.bitrate, maxFramerate: q.fps }); // chưa phát: chỉ đặt mức
   await LiveKitLive.publishTeacher({ audioTrack: camStream.getAudioTracks()[0], videoTrack: camStream.getVideoTracks()[0] });
 }
 
