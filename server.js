@@ -553,7 +553,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:leave', () => leaveRoom());
-  socket.on('disconnect', () => leaveRoom());
+  socket.on('disconnect', () => leaveRoom(true)); // giữ phiên LiveKit: client tự nối lại socket, LiveKit tự phát hiện khi họ đóng trang
 
   function leaveRoom(keepMedia = false) {
     const classId = socket.data.classId;

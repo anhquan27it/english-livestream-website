@@ -93,6 +93,7 @@ function createRouter({ lk, auth, lives, findClass, canAccess, viewerUserId, gro
     const live = lives.get(classId);
     if (!live) return res.status(409).json({ error: 'Buổi học chưa bắt đầu hoặc đã kết thúc.' });
     if (live.banned && live.banned.has(req.user.id)) return res.status(403).json({ error: 'Bạn đã bị mời rời buổi học này.' });
+    if (live.banned && live.banned.has(req.user.id)) return res.status(403).json({ error: 'Bạn đã bị mời rời buổi học này.' });
     const isTeacher = ['teacher', 'admin'].includes(req.user.role);
     try {
       let params;

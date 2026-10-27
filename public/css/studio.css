@@ -372,3 +372,6 @@
 .rail select, .rail .btn { min-width: 0; }
 .rail > div:last-child { flex-wrap: wrap; }
 @media (max-width: 1180px) { .rail { overflow-x: auto; } .rail > div:last-child { flex-wrap: nowrap; align-items: center; } }
+
+/* Đang chiếu slide/PDF: lớp phủ trạng thái nhẹ ("giáo viên quay lại", "đang kết nối"...) không được che nội dung bài học */
+.stage.with-slide .stage-state:not(.fatal) { display: none; }

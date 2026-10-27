@@ -106,11 +106,14 @@ async function init() {
       renderPeople();
     });
   } else {
+    // Với LiveKit, trạng thái giáo viên do chính phòng LiveKit báo (ParticipantConnected/Disconnected); socket chỉ là kênh điều khiển
+    // và có thể rớt thoáng qua mà hình vẫn chạy, nên bỏ qua hai sự kiện này để lớp phủ không kẹt.
     socket.on('teacher:left', () => {
+      if (LK) return;
       closeStudentPeer();
       showState('📡', 'Giáo viên tạm mất kết nối', 'Đang chờ giáo viên quay lại...');
     });
-    socket.on('teacher:joined', () => showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'));
+    socket.on('teacher:joined', () => { if (LK) return; showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'); });
     socket.on('hand:lowered', () => { handRaised = false; renderControls(); toast('Giáo viên đã hạ tay của bạn'); });
     socket.on('speak:granted', startMic);
     socket.on('speak:revoked', ({ reason }) => stopMic(reason));
@@ -639,6 +642,7 @@ function startTimer(startedAt) {
 function showState(emoji, title, text, withBack = false) {
   const s = $('stageState');
   s.hidden = false;
+  s.classList.toggle('fatal', !!withBack);
   s.innerHTML = `<div>${emoji ? `<div class="emoji">${emoji}</div>` : '<div class="spinner"></div>'}
     <h2>${esc(title)}</h2><p>${esc(text || '')}</p>
     ${withBack ? `<a class="btn btn-primary" href="${Auth.home(me)}"><i data-lucide="arrow-left"></i> Về trang lớp học</a>` : ''}</div>`;
@@ -996,6 +1000,14 @@ function lkHandlers() {
       if (sv && sv.userId === identity && Mixer.active) Mixer.attachSpeaker(track, false);
     },
     onFirstVideo: () => hideState(),
+    // Giáo viên vào lại phòng LiveKit sau khi mất kết nối: phát lại camera/micro (và màn hình đang chia sẻ)
+    onRejoined: async () => {
+      if (!isTeacher || !camStream) return;
+      // Ngắt kết nối có thể làm dừng track camera/micro: nếu vậy thì mở lại thiết bị trước khi phát
+      if (camStream.getTracks().some((t) => t.readyState === 'ended')) { camStream.getTracks().forEach((t) => t.stop()); await startMedia(); }
+      await LiveKitLive.publishTeacher({ audioTrack: camStream.getAudioTracks()[0], videoTrack: camStream.getVideoTracks()[0] });
+      if (screenTrack) await LiveKitLive.publishScreen(screenTrack, null);
+    },
     onTeacherGone: () => showState('📡', 'Giáo viên tạm mất kết nối', 'Đang chờ giáo viên quay lại...'),
     onTeacherBack: () => showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'),
     onNetwork: (st) => {

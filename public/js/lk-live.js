@@ -50,11 +50,35 @@ const LiveKitLive = (() => {
     // Người đã có trong phòng trước khi mình vào
     room.remoteParticipants.forEach((p) => {
       if (o.onPresence) o.onPresence(p.identity, true);
-      if (!o.isTeacher && isTeacherP(p) && o.onTeacherBack) o.onTeacherBack();
+      if (!o.isTeacher && isTeacherP(p) && o.onTeacherBack && !hasVideo()) o.onTeacherBack();
     });
     return room;
   }
 
+  const hasVideo = () => !!(videos.screen || videos.camera);
+  // Mất kết nối hẳn (không phải do bị mời ra): thử vào lại phòng vài lần, giáo viên phát lại camera/micro qua o.onRejoined
+  let rejoining = false;
+  async function rejoin() {
+    if (rejoining) return;
+    rejoining = true;
+    for (let i = 0; i < 5 && !closing; i++) {
+      try {
+        if (o.onNetwork) o.onNetwork('reconnecting');
+        await new Promise((res) => setTimeout(res, 1000 * (i + 1)));
+        if (closing) break;
+        Object.keys(videos).forEach((k) => delete videos[k]);
+        renderVideo();
+        audioEls.forEach((el) => el.remove()); audioEls.clear();
+        await connect();
+        if (o.onRejoined) await o.onRejoined();
+        if (o.onNetwork) o.onNetwork('ok');
+        rejoining = false;
+        return;
+      } catch { /* thử lại */ }
+    }
+    rejoining = false;
+    if (!closing && o.onNetwork) o.onNetwork('lost');
+  }
   const isTeacherP = (p) => { try { return ['teacher', 'admin'].includes(JSON.parse(p.metadata || '{}').role); } catch { return false; } };
 
   function wireMain(r) {
@@ -88,7 +112,7 @@ const LiveKitLive = (() => {
     });
     r.on(E.ParticipantConnected, (p) => {
       if (o.onPresence) o.onPresence(p.identity, true);
-      if (!o.isTeacher && isTeacherP(p) && o.onTeacherBack) o.onTeacherBack();
+      if (!o.isTeacher && isTeacherP(p) && o.onTeacherBack && !hasVideo()) o.onTeacherBack();
     });
     r.on(E.ParticipantDisconnected, (p) => {
       if (o.onPresence) o.onPresence(p.identity, false);
@@ -97,7 +121,14 @@ const LiveKitLive = (() => {
     r.on(E.AudioPlaybackStatusChanged, () => { if (!r.canPlaybackAudio) needGesture(); });
     r.on(E.Reconnecting, () => { if (o.onNetwork) o.onNetwork('reconnecting'); });
     r.on(E.Reconnected, () => { if (o.onNetwork) o.onNetwork('ok'); });
-    r.on(E.Disconnected, () => { if (!closing && o.onNetwork) o.onNetwork('lost'); });
+    r.on(E.Disconnected, (reason) => {
+      if (closing || r !== room) return;
+      const DR = lib().DisconnectReason || {};
+      // Bị mời ra / mở ở tab khác / phòng đã đóng: không tự nối lại
+      const final = [DR.DUPLICATE_IDENTITY, DR.PARTICIPANT_REMOVED, DR.ROOM_DELETED, DR.USER_REJECTED].filter((x) => x !== undefined);
+      if (final.includes(reason)) { if (o.onNetwork) o.onNetwork('lost'); return; }
+      rejoin();
+    });
   }
 
   // Ưu tiên màn hình giáo viên chia sẻ, nếu không có thì camera
@@ -240,7 +271,7 @@ const LiveKitLive = (() => {
   }
 
   return {
-    isEnabled, connect, disconnect, setMuted, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
+    isEnabled, connect, disconnect, setMuted, hasVideo, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
     startSpeaking, stopSpeaking, setSpeakerMuted, joinGroup,
     audioTrackOf: (identity) => audioByUser.get(identity) || null,
     get room() { return room; },
