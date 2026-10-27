@@ -460,3 +460,7 @@
 .spk-tile span { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 2px 8px; border-radius: 6px; background: rgba(10, 8, 24, .75); color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spk-note { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 12px; border-radius: 10px; background: rgba(10, 8, 24, .82); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .spk-note[hidden] { display: none; }
+
+/* Tooltip ở thanh trên/tab chat phải nổi lên trên khung video (khung video đứng sau trong DOM nên trước đây đè lên) */
+.live-top { position: relative; z-index: 30; }
+.panel-tabs { position: relative; z-index: 30; }
