@@ -12,7 +12,12 @@ const recordings = require('./recordings');
 const writingMod = require('./writing');
 const pdfshareMod = require('./pdfshare');
 const breakoutMod = require('./breakout');
+const livekitMod = require('./livekit');
+const operations = require('./operations');
+const sessions = require('./sessions');
 
+store.lock();
+store.applyAdminSetup();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -26,17 +31,28 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 // ---------- Trạng thái livestream (trong bộ nhớ) ----------
 // classId -> { title, startedAt, teacherSocket, viewers: Map<socketId, {userId, name, hand}>, attendees:Set, peak, word }
 // Thêm: lesson (bản chụp bài giảng đang chiếu), slideIndex, activity (hoạt động đang mở), scores (điểm theo học sinh) - xem present.js
-const lives = new Map();
+const lives = sessions.restore();
 const present = presentMod.init({ io, lives });
-const interact = interactMod.init({ io, lives, present });
+const lk = livekitMod.create(); // LiveKit (video/âm thanh); tắt nếu chưa cấu hình, khi đó dùng WebRTC P2P
+const interact = interactMod.init({ io, lives, present, lk });
 const writing = writingMod.init({ io, lives });
-const breakout = breakoutMod.init({ io, lives });
+const breakout = breakoutMod.init({ io, lives, lk, onGroupStart: (live, classId) => interact.setSpeaker(live, classId, null) });
+for (const live of lives.values()) if (live.activity && live.activity.phase === 'open') present.endActivity(live);
+const checkpoint = () => sessions.checkpoint(lives);
+let checkpointTimer = null;
+const requestCheckpoint = () => { if (!checkpointTimer) checkpointTimer = setTimeout(() => { checkpointTimer = null; checkpoint(); }, 200); };
+setInterval(checkpoint, 5000).unref();
+setInterval(() => { try { store.backup(); } catch (e) { console.error('[backup]', e.message); } }, 86400000).unref();
+try {
+  const fs = require('fs'), folder = path.join(store.dir, 'backups'), today = 'db-' + new Date().toISOString().slice(0, 10);
+  if (!fs.existsSync(folder) || !fs.readdirSync(folder).some(n => n.startsWith(today))) store.backup();
+} catch (e) { console.error('[backup]', e.message); }
 
 // ---------- Helpers ----------
 const db = () => store.data;
 const findUser = (id) => db().users.find((u) => u.id === id);
 const findClass = (id) => db().classes.find((c) => c.id === id);
-const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role };
+const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, status: u.status || 'active' };
 
 function liveInfo(classId) {
   const live = lives.get(classId);
@@ -72,8 +88,10 @@ function classForStudent(c, userId) {
 }
 
 function canAccessLive(user, c) {
-  if (!user || !c) return false;
+  if (!user || !c || user.status === 'blocked' || user.status === 'pending') return false;
+  if (user.role === 'admin') return true;
   if (user.role === 'teacher') return c.teacherId === user.id;
+  if (user.role === 'assistant') return (c.assistantIds || []).includes(user.id);
   return c.studentIds.includes(user.id);
 }
 
@@ -86,14 +104,16 @@ function notifyClass(c) {
 // ---------- Auth ----------
 function issueToken(userId) {
   const token = crypto.randomBytes(24).toString('hex');
-  db().tokens[token] = { userId, createdAt: Date.now() };
+  db().tokens[token] = { userId, createdAt: Date.now(), expiresAt: Date.now() + 7 * 86400000 };
   store.save();
   return token;
 }
 
 function userFromToken(token) {
   const t = token && db().tokens[token];
-  return t ? findUser(t.userId) : null;
+  if (!t || Date.now() >= (t.expiresAt || t.createdAt + 7 * 86400000)) return null;
+  const u = findUser(t.userId);
+  return u && !['blocked', 'pending'].includes(u.status) ? u : null;
 }
 
 function auth(role) {
@@ -101,42 +121,60 @@ function auth(role) {
     const token = (req.headers.authorization || '').replace('Bearer ', '');
     const user = userFromToken(token);
     if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập lại.' });
-    if (role && user.role !== role) return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' });
+    if (role && user.role !== role && !(role === 'teacher' && user.role === 'admin')) return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' });
     req.user = user;
     req.token = token;
     next();
   };
 }
 
-app.post('/api/register', (req, res) => {
+const loginHits = new Map();
+function authLimit(req, res, next) {
+  const now = Date.now(), key = req.ip;
+  const entry = loginHits.get(key);
+  const hit = entry && entry.until > now ? entry : { count: 0, until: now + 60000 };
+  hit.count++; loginHits.set(key, hit);
+  if (loginHits.size > 10000) for (const [k, v] of loginHits) if (v.until <= now) loginHits.delete(k);
+  if (hit.count > 30) return res.status(429).json({ error: 'Thử quá nhiều lần. Đợi một phút rồi thử lại.' });
+  next();
+}
+app.post('/api/register', authLimit, (req, res) => {
   const { name, email, password, role } = req.body || {};
   if (!name || !email || !password) return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin.' });
   if (!['teacher', 'student'].includes(role)) return res.status(400).json({ error: 'Vai trò không hợp lệ.' });
-  if (password.length < 6) return res.status(400).json({ error: 'Mật khẩu tối thiểu 6 ký tự.' });
+  if (typeof password !== 'string' || password.length < 6 || password.length > 128 || typeof name !== 'string' || name.trim().length > 100 || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.length > 254) return res.status(400).json({ error: 'Tên/email không hợp lệ hoặc mật khẩu phải có 6–128 ký tự.' });
   const mail = String(email).trim().toLowerCase();
   if (db().users.some((u) => u.email === mail)) return res.status(400).json({ error: 'Email đã được sử dụng.' });
-  const user = { id: store.id('u'), name: String(name).trim(), email: mail, role, password: store.hashPassword(password), createdAt: Date.now() };
+  const user = { id: store.id('u'), name: String(name).trim(), email: mail, role, status: role === 'teacher' ? 'pending' : 'active', password: store.hashPassword(password), createdAt: Date.now() };
   db().users.push(user);
   store.save();
+  if (user.status === 'pending') return res.status(202).json({ pending: true, message: 'Đăng ký thành công. Chờ quản trị viên duyệt tài khoản giáo viên.' });
   res.json({ token: issueToken(user.id), user: publicUser(user) });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimit, (req, res) => {
   const { email, password } = req.body || {};
   const user = db().users.find((u) => u.email === String(email || '').trim().toLowerCase());
   if (!user || !store.verifyPassword(String(password || ''), user.password)) {
     return res.status(400).json({ error: 'Email hoặc mật khẩu không đúng.' });
   }
+  if (['blocked', 'pending'].includes(user.status)) return res.status(403).json({ error: user.status === 'pending' ? 'Tài khoản đang chờ quản trị viên duyệt.' : 'Tài khoản đã bị khóa.' });
   res.json({ token: issueToken(user.id), user: publicUser(user) });
 });
 
 app.post('/api/logout', auth(), (req, res) => {
   delete db().tokens[req.token];
+  for (const s of io.sockets.sockets.values()) if (s.data.token === req.token) s.disconnect(true);
   store.save();
   res.json({ ok: true });
 });
 
 app.get('/api/me', auth(), (req, res) => res.json({ user: publicUser(req.user) }));
+app.post('/api/me/password', auth(), (req, res) => {
+  const { currentPassword, password } = req.body || {};
+  if (!store.verifyPassword(String(currentPassword || ''), req.user.password) || typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'Mật khẩu hiện tại sai hoặc mật khẩu mới cần 8–128 ký tự.' });
+  req.user.password = store.hashPassword(password); revokeUser(req.user.id); store.audit(req.user, 'password.changed', req.user.id); res.json({ ok: true });
+});
 
 // ---------- Bài giảng + AI ----------
 lessons.recoverJobs();
@@ -145,14 +183,20 @@ app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive
 app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
 const pdfshare = pdfshareMod.init({ io, lives, auth, findClass, canAccess: canAccessLive, present });
 app.use(pdfshare.router);
+app.use(livekitMod.createRouter({
+  lk, auth, lives, findClass, canAccess: canAccessLive,
+  viewerUserId: (live, sid) => (live.viewers.get(sid) || {}).userId,
+  groupForUser: breakout.groupForUser,
+}));
+app.use(operations.createRouter({ auth, lives, lk, findClass, canAccess: canAccessLive, endLive, revokeUser, publicUser, notifyClass, checkpoint }));
 
 // ---------- Lớp học ----------
 app.get('/api/classes', auth(), (req, res) => {
   const u = req.user;
-  if (u.role === 'teacher') {
+  if (u.role === 'teacher' || u.role === 'admin') {
     return res.json({ classes: db().classes.filter((c) => c.teacherId === u.id).map(classForTeacher) });
   }
-  const list = db().classes.filter((c) => c.studentIds.includes(u.id) || c.pendingIds.includes(u.id));
+  const list = db().classes.filter((c) => c.studentIds.includes(u.id) || c.pendingIds.includes(u.id) || (c.assistantIds || []).includes(u.id));
   res.json({ classes: list.map((c) => classForStudent(c, u.id)) });
 });
 
@@ -274,7 +318,8 @@ app.post('/api/classes/:id/live', auth('teacher'), (req, res) => {
   if (!c) return;
   if (!lives.has(c.id)) {
     const title = String((req.body || {}).title || '').trim() || 'Buổi học trực tiếp';
-    lives.set(c.id, { title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map(), speaker: null, pad: null, pdf: null, breakout: null });
+    lives.set(c.id, { classId: c.id, title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), attendance: {}, banned: new Set(), revealed: new Set(), scored: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map(), speaker: null, pad: null, pdf: null, breakout: null });
+    checkpoint();
     notifyClass(c);
   }
   res.json({ live: liveInfo(c.id) });
@@ -291,43 +336,71 @@ function endLive(c, reason) {
   const live = lives.get(c.id);
   if (!live) return;
   present.endActivity(live);
+  const taught = live.lesson || live.lastLesson;
+  const lesson = taught && db().lessons.find(l => l.id === taught.id);
+  if (lesson) lesson.taught[c.id] = Date.now();
+  for (const sid of [...live.viewers.keys()]) closeAttendance(live, sid);
+  const groupIds = live.breakout ? live.breakout.groups.map((g) => g.id) : [];
   breakout.end(live, c.id, 'Buổi học đã kết thúc.');
+  lk.endRooms(c.id, groupIds); // ngắt mọi người khỏi phòng LiveKit
   c.history.unshift({
     title: live.title,
     startedAt: live.startedAt,
     endedAt: Date.now(),
     peak: live.peak,
     attendees: [...live.attendees],
-    lessonTitle: live.lesson ? live.lesson.title : '',
-    scores: present.ranking(live).slice(0, 10),
+    lessonTitle: taught ? taught.title : '',
+    scores: present.ranking(live),
+    attendance: live.attendance || {}, pad: live.pad ? { prompt: live.pad.prompt, entries: [...live.pad.entries], featured: live.pad.featured } : null,
   });
   c.history = c.history.slice(0, 50);
   store.save();
   io.to('live:' + c.id).emit('live:ended', { reason });
   io.in('live:' + c.id).socketsLeave('live:' + c.id);
   lives.delete(c.id);
+  checkpoint();
   notifyClass(c);
 }
 
-function kickUserFromLive(classId, userId, reason) {
+function kickUserFromLive(classId, userId, reason, ban = true) {
   const live = lives.get(classId);
   if (!live) return;
+  live.banned = live.banned || new Set(); if (ban) live.banned.add(userId);
+  lk.removeUser(classId, userId, live.breakout ? live.breakout.groups.map(g => g.id) : []);
   for (const [sid, v] of live.viewers) {
     if (v.userId === userId) {
       io.to(sid).emit('kicked', { reason });
       removeViewer(classId, sid);
       const s = io.sockets.sockets.get(sid);
-      if (s) s.leave('live:' + classId);
+      if (s) { s.leave('live:' + classId); s.data.classId = null; }
     }
   }
+}
+
+function revokeUser(userId) {
+  for (const [token, t] of Object.entries(db().tokens)) if (t.userId === userId) delete db().tokens[token];
+  for (const [classId, live] of lives) {
+    if (findClass(classId)?.teacherId === userId) endLive(findClass(classId), 'Tài khoản giáo viên thay đổi quyền.');
+    else kickUserFromLive(classId, userId, 'Phiên đăng nhập đã bị thu hồi.', false);
+  }
+  io.in('user:' + userId).disconnectSockets(true); store.save();
+}
+
+function closeAttendance(live, sid) {
+  const viewer = live.viewers.get(sid); if (!viewer) return;
+  live.attendance = live.attendance || {};
+  const a = live.attendance[viewer.userId] || { seconds: 0, joins: 0 };
+  if (viewer.joinedAt) a.seconds += Math.max(0, Math.floor((Date.now() - viewer.joinedAt) / 1000));
+  viewer.joinedAt = null; live.attendance[viewer.userId] = a;
 }
 
 function removeViewer(classId, socketId) {
   const live = lives.get(classId);
   if (!live || !live.viewers.has(socketId)) return;
-  live.viewers.delete(socketId);
+  closeAttendance(live, socketId);
   interact.onViewerGone(live, classId, socketId);
   breakout.onViewerGone(live, classId, socketId);
+  live.viewers.delete(socketId);
   if (live.teacherSocket) io.to(live.teacherSocket).emit('viewer:left', { socketId });
   io.to('live:' + classId).emit('viewers:count', live.viewers.size);
   const c = findClass(classId);
@@ -339,26 +412,46 @@ io.use((socket, next) => {
   const user = userFromToken(socket.handshake.auth && socket.handshake.auth.token);
   if (!user) return next(new Error('unauthorized'));
   socket.data.user = user;
+  socket.data.token = socket.handshake.auth.token;
   next();
 });
 
 io.on('connection', (socket) => {
   const user = socket.data.user;
   socket.join('user:' + user.id);
+  const register = socket.on.bind(socket);
+  socket.on = (event, handler) => register(event, (...args) => {
+    const failed = () => { const ack = args.find(a => typeof a === 'function'); if (ack) ack({ error: 'Dữ liệu không hợp lệ. Hãy tải lại phòng.' }); };
+    try { const result = handler(...args); if (result && typeof result.catch === 'function') result.catch(failed); }
+    catch { failed(); }
+  });
+  socket.use(([event], next) => {
+    if (!userFromToken(socket.data.token)) { socket.disconnect(true); return; }
+    if (!['room:join', 'room:leave'].includes(event)) {
+      const live = lives.get(socket.data.classId);
+      if (!live || (live.teacherSocket !== socket.id && !live.viewers.has(socket.id))) return;
+    }
+    requestCheckpoint(); next();
+  });
 
-  socket.on('room:join', ({ classId }, ack) => {
+  socket.on('room:join', ({ classId } = {}, ack) => {
     const c = findClass(classId);
     const reply = typeof ack === 'function' ? ack : () => {};
     if (!canAccessLive(user, c)) return reply({ error: 'Bạn không có quyền tham gia buổi học này.' });
     const live = lives.get(classId);
     if (!live) return reply({ error: 'Buổi học chưa bắt đầu hoặc đã kết thúc.' });
+    if (live.banned && live.banned.has(user.id)) return reply({ error: 'Bạn đã bị mời rời buổi học này.' });
+    if (user.role === 'assistant' || user.role === 'admin' && c.teacherId !== user.id) return reply({ error: 'Chỉ giáo viên phụ trách điều khiển phòng. Trợ giảng quản lý bài tập tại trang Học tập.' });
+    if (user.role === 'student' && ![...live.viewers.values()].some(v => v.userId === user.id) && live.viewers.size >= db().settings.limits.maxParticipants - 1) return reply({ error: 'Lớp đã đủ số người cho phép.' });
+    if (socket.data.classId) leaveRoom(socket.data.classId === classId);
 
     socket.data.classId = classId;
     socket.join('live:' + classId);
 
-    if (user.role === 'teacher') {
+    if (user.role === 'teacher' || user.role === 'admin') {
       if (live.teacherSocket && live.teacherSocket !== socket.id) {
         io.to(live.teacherSocket).emit('kicked', { reason: 'Bạn đã mở buổi học ở một tab khác.' });
+        const old = io.sockets.sockets.get(live.teacherSocket); if (old) { old.leave('live:' + classId); old.data.classId = null; }
       }
       live.teacherSocket = socket.id;
       socket.to('live:' + classId).emit('teacher:joined');
@@ -381,9 +474,12 @@ io.on('connection', (socket) => {
       if (v.userId === user.id && sid !== socket.id) {
         io.to(sid).emit('kicked', { reason: 'Bạn đã tham gia ở một tab/thiết bị khác.' });
         removeViewer(classId, sid);
+        const old = io.sockets.sockets.get(sid); if (old) { old.leave('live:' + classId); old.data.classId = null; }
       }
     }
-    const viewer = { userId: user.id, name: user.name, hand: false };
+    const viewer = { userId: user.id, name: user.name, hand: false, joinedAt: Date.now() };
+    live.attendance = live.attendance || {};
+    const attendance = live.attendance[user.id] || { seconds: 0, joins: 0 }; attendance.name = user.name; attendance.joins++; live.attendance[user.id] = attendance;
     live.viewers.set(socket.id, viewer);
     live.attendees.add(user.id);
     live.peak = Math.max(live.peak, live.viewers.size);
@@ -391,7 +487,9 @@ io.on('connection', (socket) => {
     io.to('live:' + classId).emit('viewers:count', live.viewers.size);
     socket.to('live:' + classId).emit('chat', { system: true, text: `${user.name} đã tham gia lớp học`, at: Date.now() });
     notifyClass(c);
-    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }), speaker: interact.speakerInfo(live), pad: writing.stateFor(live, { userId: user.id }), pdf: live.pdf });
+    const group = breakout.rejoin(live, socket.id, user.id);
+    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }), speaker: interact.speakerInfo(live), pad: writing.stateFor(live, { userId: user.id }), pdf: live.pdf, breakout: group });
+    if (group) for (const m of group.members) if (m.socketId !== socket.id) io.to(m.socketId).emit('breakout:member-joined', { socketId: socket.id, name: user.name });
   });
 
   present.attach(socket);
@@ -404,7 +502,7 @@ io.on('connection', (socket) => {
   socket.on('signal', ({ to, data }) => {
     const live = lives.get(socket.data.classId);
     if (!live) return;
-    const allowed = user.role === 'teacher' ? live.teacherSocket === socket.id && live.viewers.has(to) : to === live.teacherSocket && live.viewers.has(socket.id);
+    const allowed = ['teacher', 'admin'].includes(user.role) ? live.teacherSocket === socket.id && live.viewers.has(to) : to === live.teacherSocket && live.viewers.has(socket.id);
     if (allowed) io.to(to).emit('signal', { from: socket.id, data });
   });
 
@@ -446,25 +544,24 @@ io.on('connection', (socket) => {
     io.to('live:' + classId).emit('word', live.word);
   });
 
-  socket.on('kick', ({ socketId }) => {
+  socket.on('kick', ({ socketId } = {}) => {
     const classId = socket.data.classId;
     const live = lives.get(classId);
     if (!live || live.teacherSocket !== socket.id) return;
-    io.to(socketId).emit('kicked', { reason: 'Giáo viên đã mời bạn rời khỏi buổi học.' });
-    removeViewer(classId, socketId);
-    const s = io.sockets.sockets.get(socketId);
-    if (s) s.leave('live:' + classId);
+    const viewer = live.viewers.get(socketId);
+    if (viewer) kickUserFromLive(classId, viewer.userId, 'Giáo viên đã mời bạn rời khỏi buổi học.');
   });
 
   socket.on('room:leave', () => leaveRoom());
   socket.on('disconnect', () => leaveRoom());
 
-  function leaveRoom() {
+  function leaveRoom(keepMedia = false) {
     const classId = socket.data.classId;
     const live = lives.get(classId);
     socket.data.classId = null;
     if (!live) return;
     socket.leave('live:' + classId);
+    if (!keepMedia) lk.removeUser(classId, user.id, live.breakout ? live.breakout.groups.map(g => g.id) : []);
     if (live.teacherSocket === socket.id) {
       live.teacherSocket = null;
       interact.setSpeaker(live, classId, null);
@@ -480,4 +577,10 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`EngLive đang chạy tại http://localhost:${PORT}`));
+app.use((err, req, res, next) => { console.error('[request]', err.message); if (!res.headersSent) res.status(err.status || 500).json({ error: err.status === 413 ? 'Dữ liệu vượt giới hạn.' : 'Yêu cầu không hợp lệ hoặc máy chủ gặp lỗi.' }); });
+function shutdown() { checkpoint(); store.flush(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); }
+process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
+server.listen(PORT, () => {
+  console.log(`EngLive đang chạy tại http://localhost:${PORT}`);
+  console.log(lk.enabled ? `Video: LiveKit (${lk.config.url})` : 'Video: WebRTC P2P (chưa cấu hình LiveKit)');
+});

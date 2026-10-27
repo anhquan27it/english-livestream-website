@@ -1,6 +1,7 @@
 const me = Auth.require('student');
 let classes = [];
 let liveIds = new Set();
+const directory = new ClassDirectory('student', renderClassList);
 
 const WORDS = [
   { word: 'resilient', ipa: '/rɪˈzɪl.i.ənt/', type: 'adj', meaning: 'kiên cường, mau phục hồi', example: 'Children are often very resilient.' },
@@ -41,7 +42,7 @@ function render() {
   const members = classes.filter((c) => c.status === 'member');
   const live = members.filter((c) => c.live);
 
-  document.getElementById('liveNow').innerHTML = live.map((c) => `
+  document.getElementById('liveNow').innerHTML = live.slice(0, 2).map((c) => `
     <div class="live-banner">
       <div class="pulse-ic"><i data-lucide="radio"></i></div>
       <div class="info">
@@ -49,8 +50,10 @@ function render() {
         <h3 style="margin-top:6px">${esc(c.live.title)}</h3>
         <p>${esc(c.name)} · ${esc(c.teacher)} · ${c.live.viewers} bạn đang học</p>
       </div>
-      <a class="btn btn-lg" href="/live.html?class=${c.id}"><i data-lucide="play"></i> Vào học ngay</a>
-    </div>`).join('');
+      <a class="btn btn-lg" href="/devices.html?next=${encodeURIComponent('/live.html?class='+c.id)}"><i data-lucide="play"></i> Vào học ngay</a>
+    </div>`).join('') + (live.length > 2 ? `<button class="btn btn-outline live-more" id="showLiveClasses">Xem tất cả ${live.length} lớp đang live</button>` : '');
+  const showLive = document.getElementById('showLiveClasses');
+  if (showLive) showLive.onclick = () => { directory.status.value = 'live'; directory.refresh(); document.getElementById('classes').scrollIntoView({ block: 'start' }); };
 
   const attended = members.reduce((n, c) => n + c.attended, 0);
   const total = members.reduce((n, c) => n + c.sessions, 0);
@@ -60,30 +63,31 @@ function render() {
     ['target', 'tone-orange', total ? Math.round((attended / total) * 100) + '%' : '—', 'Chuyên cần'],
   ].map(([ic, tone, v, l]) => `<div class="stat"><div class="ic ${tone}"><i data-lucide="${ic}"></i></div><div><b>${v}</b><small>${l}</small></div></div>`).join('');
 
-  document.getElementById('classGrid').innerHTML = classes.length ? classes.map((c) => `
-    <article class="class-card" style="cursor:default">
-      <div class="class-cover cover-${c.color}">
-        <span class="level">${esc(c.level)}</span>
-        ${c.live ? '<span class="badge-live" style="position:relative;z-index:1">LIVE</span>' : ''}
-        <span class="emoji">${CLASS_EMOJI[c.color] || '📘'}</span>
-      </div>
-      <div class="class-body">
-        <h3>${esc(c.name)}</h3>
+  directory.setItems(classes);
+  icons();
+}
+
+function renderClassList(items) {
+  document.getElementById('classGrid').innerHTML = classes.length ? items.map((c) => `
+    <article class="catalog-card">
+      <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
+      <div class="catalog-summary">
+        <div class="catalog-heading"><h3>${esc(c.name)}</h3><span class="chip chip-muted">${esc(c.level)}</span>${c.live && c.status === 'member' ? '<span class="badge-live">LIVE</span>' : ''}</div>
         <p>${esc(c.description || '')}</p>
         <div class="class-meta">
           <span><i data-lucide="user-round"></i>${esc(c.teacher)}</span>
           <span><i data-lucide="users"></i>${c.studentCount} học sinh</span>
         </div>
-        <div class="class-foot">
+      </div>
+        <div class="catalog-actions">
           ${c.status === 'pending'
             ? '<span class="chip chip-warn"><i data-lucide="clock"></i> Chờ giáo viên duyệt</span>'
             : `<span class="chip chip-ok"><i data-lucide="check"></i> Đã học ${c.attended}/${c.sessions} buổi</span>`}
           ${c.status === 'member' ? `<button class="icon-btn" data-rec="${c.id}" title="Xem lại buổi học đã ghi hình"><i data-lucide="film"></i></button>` : ''}
-          ${c.live
-            ? `<a class="btn btn-live btn-sm" href="/live.html?class=${c.id}"><i data-lucide="play"></i> Vào học</a>`
+          ${c.live && c.status === 'member'
+            ? `<a class="btn btn-live btn-sm" href="/devices.html?next=${encodeURIComponent('/live.html?class='+c.id)}"><i data-lucide="play"></i> Vào học</a>`
             : c.status === 'member' ? `<a class="btn btn-outline btn-sm" href="/tutor.html?class=${c.id}"><i data-lucide="bot"></i> Hỏi AI</a>` : ''}
         </div>
-      </div>
     </article>`).join('') : `
     <div class="card empty" style="grid-column:1/-1"><div class="emoji">🎒</div><b>Bạn chưa tham gia lớp nào</b>Hỏi giáo viên mã lớp và nhập để xin vào lớp nhé.<br /><br />
     <button class="btn btn-primary" onclick="joinClass()"><i data-lucide="key-round"></i> Nhập mã lớp</button></div>`;

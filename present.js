@@ -65,12 +65,22 @@ function init({ io, lives }) {
     if (!act || act.phase !== 'open') return;
     act.phase = 'ended';
     clearTimeout(act.timer);
-    if (act.scene.type !== 'poll') {
+    live.revealed = live.revealed || new Set();
+    live.scored = live.scored || new Set();
+    const key = live.lesson.id + ':' + act.sceneId;
+    live.revealed.add(key);
+    const first = !live.scored.has(key);
+    if (act.scene.type !== 'poll' && first) {
       for (const [uid, a] of act.answers) {
         const prev = live.scores.get(uid) || { name: a.name, points: 0, correct: 0, stars: 0 };
         live.scores.set(uid, { name: a.name, points: prev.points + a.points, correct: prev.correct + (a.correct ? 1 : 0), stars: prev.stars || 0 });
       }
     }
+    live.scored.add(key);
+    if (!first) for (const a of act.answers.values()) a.points = 0;
+    store.data.activityResults.push({ classId: live.classId, lessonId: live.lesson.id, sceneId: act.sceneId, at: Date.now(), practice: !first, answers: [...act.answers].map(([userId, a]) => ({ userId, ...a })) });
+    store.data.activityResults = store.data.activityResults.slice(-10000);
+    store.save();
     const answers = [...act.answers.values()];
     act.summary = {
       sceneId: act.sceneId, type: act.scene.type, reveal: L.reveal(act.scene), distribution: distribution(act),
@@ -83,7 +93,7 @@ function init({ io, lives }) {
     // Chỉ socket giáo viên của phòng mới được điều khiển
     const teacherCtx = () => {
       const live = lives.get(socket.data.classId);
-      return live && live.teacherSocket === socket.id && user.role === 'teacher' ? live : null;
+      return live && live.teacherSocket === socket.id && ['teacher', 'admin'].includes(user.role) ? live : null;
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
 
@@ -92,13 +102,14 @@ function init({ io, lives }) {
       if (!live) return reply(ack)({ error: 'Bạn không có quyền điều khiển buổi học này.' });
       const lesson = store.data.lessons.find((l) => l.id === lessonId && l.teacherId === user.id);
       if (!lesson || !lesson.scenes.length) return reply(ack)({ error: 'Bài giảng trống hoặc không tồn tại.' });
+      endActivity(live);
       if (live.pdf) { live.pdf = null; io.to('live:' + socket.data.classId).emit('pdf:state', null); } // không chiếu PDF và bài giảng cùng lúc
       live.lesson = { id: lesson.id, title: lesson.title, scenes: JSON.parse(JSON.stringify(lesson.scenes)) };
       live.slideIndex = 0;
       live.activity = null;
       // Gắn bài vào lớp để học sinh hỏi AI sau buổi học
       if (!lesson.classIds.includes(socket.data.classId)) lesson.classIds.push(socket.data.classId);
-      lesson.taught[socket.data.classId] = Date.now();
+      // Chỉ đánh dấu đã dạy khi giáo viên kết thúc buổi, không phải lúc vừa mở bài.
       store.save();
       broadcast(live);
       reply(ack)({ ok: true });
@@ -108,6 +119,7 @@ function init({ io, lives }) {
       const live = teacherCtx();
       if (!live || !live.lesson) return;
       endActivity(live);
+      live.lastLesson = live.lesson;
       live.lesson = null;
       live.activity = null;
       broadcast(live);
@@ -152,6 +164,7 @@ function init({ io, lives }) {
       const live = lives.get(socket.data.classId);
       const viewer = live && live.viewers.get(socket.id);
       const act = live && live.activity;
+      if (act && act.phase === 'open' && act.endsAt && Date.now() >= act.endsAt) { endActivity(live); broadcast(live); }
       if (!viewer || !act || act.phase !== 'open') return reply(ack)({ error: 'Hoạt động đã đóng.' });
       if (act.answers.has(viewer.userId)) return reply(ack)({ error: 'Bạn đã trả lời rồi.' });
       const g = L.grade(act.scene, answer);
@@ -168,6 +181,7 @@ function init({ io, lives }) {
   function stopLesson(live) {
     if (!live.lesson) return;
     endActivity(live);
+    live.lastLesson = live.lesson;
     live.lesson = null;
     live.activity = null;
     broadcast(live);

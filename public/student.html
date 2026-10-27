@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/classes.css" />
 </head>
 <body>
   <div class="app">
@@ -24,13 +25,12 @@
 
       <div id="liveNow"></div>
 
-      <div class="two-col">
-        <div>
           <div class="stats stats-3" id="stats"></div>
           <div class="section-title" id="classes"><h2>Lớp học của tôi</h2></div>
+          <div id="classTools"></div>
           <div class="class-grid" id="classGrid"></div>
-        </div>
-        <aside style="display:grid;gap:18px">
+          <nav class="catalog-pagination" id="classPagination" aria-label="Phân trang lớp học"></nav>
+        <aside class="class-extras">
           <div class="word-card" id="wordCard"></div>
           <div class="card">
             <div class="section-title" style="margin-top:0"><h2>Mẹo khi học live</h2></div>
@@ -39,13 +39,13 @@
             <div class="history-item"><div class="ic tone-mint">✍️</div><div><b>Chat bằng tiếng Anh</b><small>Luyện viết phản xạ mỗi buổi</small></div></div>
           </div>
         </aside>
-      </div>
     </main>
   </div>
 
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/class-directory.js"></script>
   <script src="/js/student.js"></script>
 </body>
 </html>

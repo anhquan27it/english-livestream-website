@@ -5,6 +5,7 @@
 const BreakoutLive = (() => {
   const o = {};                  // { isTeacher, socket, stage, panel, getMedia(), muteMain(bool), teacherTracks() }
   const peers = new Map();       // socketId -> { pc, name }
+  let visitTracks = [];
   const pendingIce = new Map();  // socketId -> [candidate...] đến trước khi có remoteDescription
   let group = null;              // học sinh: { groupId, name, members, endsAt }
   let local = null;              // học sinh: luồng camera/micro của mình
@@ -14,6 +15,8 @@ const BreakoutLive = (() => {
   let tState = null;             // giáo viên: trạng thái nhóm từ máy chủ
   let visiting = null;           // giáo viên: groupId đang ghé thăm
   let timerInt = null;
+  let handle = null;             // LiveKit: phòng nhóm đang tham gia { disconnect() }
+  const lkParts = new Map();     // LiveKit: identity -> { name, video }
 
   function init(opts) {
     Object.assign(o, opts);
@@ -26,10 +29,58 @@ const BreakoutLive = (() => {
       paintTeacher();
     } else {
       s.on('breakout:assigned', onAssigned);
+      s.on('breakout:member-joined', async ({ socketId, name }) => {
+        setName(socketId, name);
+        if (o.lk || !group) return;
+        if (ready) await ready;
+        if (o.socket.id < socketId) call(socketId, local ? local.getTracks() : [], local || new MediaStream());
+      });
       s.on('breakout:visitor', ({ socketId, name }) => { setName(socketId, name); toast('👩‍🏫 Giáo viên ghé thăm nhóm của bạn'); });
       s.on('breakout:visitor-left', ({ socketId }) => dropPeer(socketId));
     }
   }
+
+  // ----- LiveKit: mỗi nhóm là một phòng LiveKit; ô video theo identity (= userId) -----
+  function lkTile(identity, name) {
+    if (!tiles) return null;
+    let t = tiles.querySelector('[data-id="' + identity + '"]');
+    if (!t) {
+      t = document.createElement('div');
+      t.className = 'bo-tile';
+      t.dataset.id = identity;
+      t.innerHTML = '<video autoplay playsinline muted></video><span></span>';
+      tiles.appendChild(t);
+    }
+    t.querySelector('span').textContent = name;
+    return t;
+  }
+  function paintLk(identity) {
+    const part = lkParts.get(identity);
+    if (!part) return;
+    const t = lkTile(identity, part.name);
+    if (!t) return;
+    const v = t.querySelector('video');
+    if (part.video) { part.video.attach(v); v.play().catch(() => {}); } else v.srcObject = null;
+  }
+  const lkHandlers = () => ({
+    onTrack(identity, name, track) {
+      const part = lkParts.get(identity) || { name };
+      part.name = name;
+      if (track.kind === 'video') part.video = track;
+      lkParts.set(identity, part);
+      paintLk(identity);
+    },
+    onTrackGone(identity, track) {
+      const part = lkParts.get(identity);
+      if (part && part.video === track) part.video = null;
+      paintLk(identity);
+    },
+    onGone(identity) {
+      lkParts.delete(identity);
+      const t = tiles && tiles.querySelector('[data-id="' + identity + '"]');
+      if (t) t.remove();
+    },
+  });
 
   const mkPc = (id) => {
     dropPeer(id, true);
@@ -78,6 +129,7 @@ const BreakoutLive = (() => {
   async function onSignal({ from, data }) {
     try {
       if (data.sdp && data.sdp.type === 'offer') {
+        if (!o.isTeacher && !group) { const until = Date.now() + 2000; while (!group && Date.now() < until) await new Promise(r => setTimeout(r, 25)); if (!group) return; }
         if (ready) await ready; // đợi bật xong camera/micro để trả lời kèm hình ảnh của mình
         const pc = mkPc(from);
         if (local) local.getTracks().forEach((t) => pc.addTrack(t, local));
@@ -123,6 +175,13 @@ const BreakoutLive = (() => {
     layer.querySelector('[data-cam]').onclick = (e) => toggle('video', e.currentTarget);
     layer.querySelector('[data-help]').onclick = () => { o.socket.emit('hand', { raised: true }); toast('Đã gọi giáo viên'); };
     if (group.endsAt) startTimer();
+    if (o.lk) {
+      try {
+        handle = await LiveKitLive.joinGroup(g.groupId, local ? local.getTracks() : [], lkHandlers());
+        if (!group) { handle.disconnect(); handle = null; } // nhóm đã kết thúc trong lúc đang kết nối
+      } catch (e) { toast('Không vào được phòng nhóm: ' + e.message, 'error'); }
+      return;
+    }
     // Người có socketId nhỏ hơn gọi trước
     for (const m of g.members) {
       if (m.socketId !== o.socket.id && o.socket.id < m.socketId) call(m.socketId, local ? local.getTracks() : [], local || new MediaStream());
@@ -156,7 +215,11 @@ const BreakoutLive = (() => {
   }
 
   function teardown(keepMain) {
+    visitTracks.forEach(t => t.stop()); visitTracks = [];
+    if (o.isTeacher && o.muteTeacherMain) o.muteTeacherMain(false);
     clearInterval(timerInt);
+    if (handle) { handle.disconnect(); handle = null; }
+    lkParts.clear();
     peers.forEach((p, id) => { if (p.pc) p.pc.close(); });
     peers.clear();
     pendingIce.clear();
@@ -197,15 +260,30 @@ const BreakoutLive = (() => {
       timerInt = setInterval(tick, 1000);
     }
     // Vẽ lại các ô video của nhóm đang ghé thăm sau khi bảng được dựng lại
+    if (visiting && o.lk) lkParts.forEach((_, id) => paintLk(id));
     if (visiting) peers.forEach((pr, id) => { if (pr.stream) addTile(id, pr.stream); });
   }
 
-  function visit(groupId) {
-    leaveVisit(true);
+  async function visit(groupId) {
+    await leaveVisit(true);
     o.socket.emit('breakout:visit', { groupId }, async (r) => {
       if (!r || r.error) return toast((r && r.error) || 'Không vào được nhóm.', 'error');
       visiting = groupId;
-      const tracks = o.teacherTracks();
+      visitTracks = o.teacherTracks().map(t => t.clone());
+      if (o.muteTeacherMain) await o.muteTeacherMain(true);
+      if (o.lk) {
+        paintTeacher();
+        try { handle = await LiveKitLive.joinGroup(groupId, visitTracks, lkHandlers()); } catch (e) {
+          toast('Không vào được phòng nhóm: ' + e.message, 'error');
+          visiting = null;
+          visitTracks.forEach(t => t.stop()); visitTracks = [];
+          if (o.muteTeacherMain) await o.muteTeacherMain(false);
+          o.socket.emit('breakout:leave-visit');
+          paintTeacher();
+        }
+        return;
+      }
+      const tracks = visitTracks;
       const stream = new MediaStream(tracks);
       r.members.forEach((m) => peers.set(m.socketId, { pc: null, name: m.name }));
       paintTeacher();
@@ -217,15 +295,19 @@ const BreakoutLive = (() => {
     });
   }
 
-  function leaveVisit(silent) {
+  async function leaveVisit(silent) {
     if (!visiting) return;
+    if (handle) { handle.disconnect(); handle = null; }
+    lkParts.clear();
     peers.forEach((p) => { if (p.pc) p.pc.close(); });
     peers.clear();
     if (tiles) tiles.innerHTML = '';
     visiting = null;
+    visitTracks.forEach(t => t.stop()); visitTracks = [];
+    if (o.muteTeacherMain) await o.muteTeacherMain(false);
     o.socket.emit('breakout:leave-visit');
     if (!silent) paintTeacher();
   }
 
-  return { init, setState(st) { tState = st; paintTeacher(); }, get active() { return !!group || !!tState; } };
+  return { init, rejoin: onAssigned, close() { tState = null; teardown(); }, setState(st) { tState = st; paintTeacher(); }, get teacherMedia() { return visiting ? visitTracks : []; }, get active() { return !!group || !!tState; } };
 })();

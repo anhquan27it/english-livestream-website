@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kiểm tra thiết bị · EngLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/operations.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="topbar"><div style="display:flex;gap:12px;align-items:center">
+        <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+        <div><h1>Sẵn sàng vào học</h1><p>Kiểm tra camera, micro và loa trước khi vào phòng.</p></div>
+      </div></div>
+      <div class="op-grid">
+        <section class="card op-card">
+          <video id="preview" class="op-device-video" autoplay muted playsinline></video>
+          <p id="status" role="status">Bấm kiểm tra để cấp quyền camera và micro.</p>
+          <div class="op-actions"><button id="start" class="btn btn-primary">Kiểm tra camera & micro</button><button id="audioOnly" class="btn btn-outline">Chỉ micro</button><button id="stop" class="btn btn-outline">Dừng</button></div>
+          <label>Âm lượng micro <meter id="level" min="0" max="1" value="0" style="width:100%"></meter></label>
+        </section>
+        <section class="card op-card">
+          <form class="op-form" id="devices"><label>Camera<select class="input" id="camera"></select></label><label>Micro<select class="input" id="microphone"></select></label><button class="btn btn-outline">Áp dụng thiết bị</button></form>
+          <p class="op-note">Lựa chọn lưu riêng trên trình duyệt này. Âm thanh thử phát qua loa đầu ra mặc định của trình duyệt.</p>
+          <div class="op-actions"><button id="speaker" class="btn btn-outline">Nghe âm thử</button><a id="continue" class="btn btn-primary" href="/student.html">Tiếp tục</a></div>
+          <p id="network" class="op-note"></p>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="/js/common.js"></script><script src="/js/devices.js"></script>
+</body>
+</html>

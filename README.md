@@ -1,5 +1,39 @@
 # EngLive — Web học tiếng Anh livestream
 
+## Bản nâng cấp quản trị & học tập (2026-10-26)
+
+Vẫn dùng JSON, chưa cần PostgreSQL. Để bật admin trên dữ liệu hiện tại:
+
+1. **Dừng server bằng Ctrl+C** trong terminal đang chạy.
+2. Chạy `npm run admin:create -- admin@englive.local` (hoặc một email **mới**, chưa có trong hệ thống).
+3. Lưu mật khẩu ngẫu nhiên được hiển thị một lần, rồi chạy lại `npm start` trong **cùng terminal đang có biến môi trường LiveKit**.
+4. Đăng nhập bằng tài khoản admin vừa tạo, mở `/admin.html`; đổi mật khẩu ở Học tập → Tài khoản. Tài khoản teacher tiếp tục dùng riêng để dạy học.
+
+Lệnh tạo admin chỉ chạy trực tiếp trên máy chủ, không nâng quyền tài khoản teacher/student hiện có và từ chối email trùng; không có API công khai tạo admin đầu tiên, không có mật khẩu admin mặc định. Với `DATA_DIR` riêng, phải dùng cùng biến này khi chạy lệnh. Server mới có khóa chống nhiều tiến trình cùng ghi một thư mục dữ liệu. Kiểm thử có thể cấp mật khẩu qua biến `ADMIN_PASSWORD` (không in ra log); khi dùng thật nên để lệnh tự sinh.
+
+- **Admin**: duyệt giáo viên, khóa tài khoản, đổi vai trò, thu hồi phiên, đặt lại mật khẩu, phân công giáo viên/trợ giảng, quản lý thành viên lớp (khi không live), kết thúc phòng, quản lý tệp, cấu hình AI, hạn mức và nhật ký. Không khóa/hạ quyền admin cuối cùng. Giáo viên đăng ký mới phải chờ duyệt; các tài khoản giáo viên cũ được giữ nguyên.
+- **Trợ giảng**: chỉ quản lý lịch/bài tập và xem báo cáo các lớp được phân công. Bản này chưa cho trợ giảng điều khiển camera/mic trong phòng live.
+- **Học tập** (`/learning.html`): lịch chống trùng lớp/giáo viên; mở phòng thủ công từ lịch; nhắc trước 15 phút khi ứng dụng đang mở; giao–nộp–chấm bài viết (0–10), hạn nộp; kho từ riêng và flashcard; kết quả hoạt động và thời gian tham gia. Chưa gửi email/Web Push khi trình duyệt đóng.
+- **Thiết bị** (`/devices.html`): xem trước camera, chọn mic/camera, đo mức mic và nghe âm thử. Nút vào học từ trang lớp đi qua bước này, có thể bỏ qua kiểm tra nếu chỉ xem.
+- **Phòng live**: chặn vào lại trong cùng buổi khi bị kick; loại khỏi LiveKit; dọn quyền khi chuyển phòng; chỉ gửi đáp án đã chốt vào AI; luyện lại không cộng điểm trùng; chặn nộp trễ; kết nối lại phòng nhóm; hiển thị Cloud/LiveKit riêng/P2P.
+- **Bảo mật**: phiên đăng nhập tối đa 7 ngày, thu hồi socket khi đăng xuất/khóa/đổi mật khẩu; giới hạn 30 yêu cầu đăng nhập/đăng ký mỗi phút/IP. Đổi mật khẩu cá nhân ở Học tập → Tài khoản; quên mật khẩu nhờ admin đặt lại, chưa có email tự phục hồi.
+- **Hạn mức EngLive**: mặc định 100 lượt hỏi AI/ngày UTC/tài khoản, 20 tác vụ soạn bài/ngày UTC/tài khoản, 100 người/lớp gồm giáo viên, 2048 MB PDF/bản ghi. Admin chỉnh trong Giới hạn & sao lưu. Đây **không phải** hạn mức/billing LiveKit Cloud; tăng ở EngLive không nâng gói nhà cung cấp.
+
+### Dữ liệu, sao lưu và khôi phục
+
+JSON được ghi qua file tạm, fsync rồi đổi tên. Snapshot phòng được chụp theo sự kiện (gộp 200 ms) và mỗi 5 giây. Sau restart, giáo viên/học sinh vào lại; slide, điểm, đáp án đã chốt, bài viết và lệnh cấm được phục hồi. Hoạt động đang mở được chốt; camera/mic phải bật lại và phòng nhóm phải chia lại. Không cam kết phục hồi thay đổi chưa tới snapshot khi máy mất điện. Một tiến trình EngLive cho mỗi `DATA_DIR`; chưa hỗ trợ nhiều server dùng chung JSON.
+
+Tự tạo backup JSON lúc khởi động nếu hôm đó chưa có, và mỗi 24 giờ server chạy; giữ 14 bản `data/backups/db-*.json`. Admin có thể tạo/tải ngay. **Backup JSON chứa cấu hình và thông tin xác thực nhạy cảm; lưu ở nơi riêng. PDF/video không nằm trong backup JSON**, cần sao chép cả thư mục `DATA_DIR` khi server đã dừng để có bản sao đầy đủ.
+
+Khôi phục: dừng server, chạy `npm run backup:restore -- db-<tên-bản-sao>.json`, rồi `npm start`. Lệnh chỉ đọc từ `DATA_DIR/backups`, giữ file trước khôi phục, xóa token cũ để mọi người đăng nhập lại; dùng được cả khi `db.json` bị hỏng. File tạm, backup và khóa nằm trong `DATA_DIR` (đã bị Git bỏ qua).
+
+### Kiểm tra bản nâng cấp
+
+- `npm test`: 55 kiểm tra với dữ liệu tạm, mock AI và mock API LiveKit, gồm các ca phân quyền, điểm, ẩn đáp án, restart và phục hồi JSON hỏng.
+- `npm run test:load`: thử Socket.IO ở 5/20/50/99 học sinh + giáo viên; không đo khả năng truyền video LiveKit hay chi phí Cloud.
+- `npm run dev:qa`: server cổng 3101, dữ liệu tạm, admin riêng `admin@test.com` / `admin-test-password` và AI giả, không kết nối LiveKit Cloud. Teacher mẫu vẫn là giáo viên. Không dùng thay server thật.
+- Đã duyệt admin/học tập bằng trình duyệt, tạo–nộp bài ở hai phiên, kiểm tra 820/1100/1400 px và 390 px. Camera/mic thật, LiveKit Cloud hai mạng, ghi hình tab và tải video đông người vẫn cần thử thực tế.
+
 Lớp học trực tiếp 1 giáo viên → nhiều học sinh, có phân quyền **Giáo viên** / **Học sinh**.
 Chỉ học sinh đã ở trong lớp của giáo viên mới xem được livestream của lớp đó.
 
@@ -96,7 +130,7 @@ Tham khảo: [Render Node.js](https://render.com/docs/deploy-node-express-app),
 
 ## Kế hoạch tiếp theo
 
-- **Lớp đông (trên ~20 học sinh)**: chuyển phần truyền video sang máy chủ chuyển tiếp **LiveKit** (giữ nguyên quiz, slide, bảng viết, chat AI; bản P2P vẫn dùng cho lớp nhỏ). Chưa làm, xem [PROJECT.md](PROJECT.md).
+- **Lớp đông (trên ~20 học sinh)**: đã có chế độ **LiveKit** cho video/âm thanh (quiz, slide, bảng viết, chat AI vẫn chạy qua Socket.IO; không cấu hình LiveKit thì dùng P2P cũ). Thử trên máy mình: `npm run livekit:dev` rồi `npm run start:lk` (hoặc đặt `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`). Để người ở máy khác vào, LiveKit phải truy cập được từ internet (LiveKit Cloud hoặc máy chủ riêng). Chi tiết: [PROJECT.md](PROJECT.md) mục *Chế độ LiveKit*.
 - **Quản lý nhiều lớp**: Admin, trợ giảng, thời khoá biểu, nhắc lịch qua email/push.
 - **Công khai**: dữ liệu bền (PostgreSQL), đăng ký giáo viên cần duyệt, Cài đặt AI chỉ dành cho quản trị viên.
 

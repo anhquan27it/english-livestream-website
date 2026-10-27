@@ -30,10 +30,14 @@ function init({ io, lives, auth, findClass, canAccess, present }) {
     if (!c) return;
     const buf = req.body;
     if (!Buffer.isBuffer(buf) || buf.slice(0, 5).toString() !== '%PDF-') return res.status(400).json({ error: 'Đây không phải tệp PDF hợp lệ.' });
+    let name;
+    try { name = decodeURIComponent(String(req.headers['x-filename'] || 'tai-lieu.pdf')).slice(0, 120); }
+    catch { return res.status(400).json({ error: 'Tên tệp không hợp lệ.' }); }
+    if (!require('./storage').available(buf.length)) return res.status(413).json({ error: 'Đã hết dung lượng lưu trữ. Liên hệ admin.' });
     fs.mkdirSync(DIR, { recursive: true });
     const id = store.id('pdf');
     fs.writeFileSync(path.join(DIR, id + '.pdf'), buf);
-    const rec = { id, classId: c.id, name: decodeURIComponent(String(req.headers['x-filename'] || 'tai-lieu.pdf')).slice(0, 120), size: buf.length, createdAt: Date.now() };
+    const rec = { id, classId: c.id, name, size: buf.length, createdAt: Date.now() };
     store.data.pdfs.push(rec);
     store.save();
     res.json({ pdf: publicPdf(rec) });
@@ -60,7 +64,7 @@ function init({ io, lives, auth, findClass, canAccess, present }) {
     const user = socket.data.user;
     const teacherLive = () => {
       const live = lives.get(socket.data.classId);
-      return live && live.teacherSocket === socket.id && user.role === 'teacher' ? live : null;
+      return live && live.teacherSocket === socket.id && ['teacher', 'admin'].includes(user.role) ? live : null;
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
     const room = () => 'live:' + socket.data.classId;

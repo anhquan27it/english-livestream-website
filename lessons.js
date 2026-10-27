@@ -340,8 +340,8 @@ function sceneText(sc, withAnswers) {
 }
 
 // answersUpTo: chỉ các scene có chỉ số nhỏ hơn mới kèm đáp án (tránh AI lộ đáp án hoạt động chưa chốt)
-function lessonContext(lesson, { answersUpTo = 0, currentSceneId } = {}) {
-  const body = lesson.scenes.map((sc, i) => `#${i + 1} ${sceneText(sc, i < answersUpTo)}${sc.id === currentSceneId ? '   <== CURRENT SLIDE' : ''}`).join('\n\n');
+function lessonContext(lesson, { answersUpTo = 0, currentSceneId, revealed } = {}) {
+  const body = lesson.scenes.map((sc, i) => `#${i + 1} ${sceneText(sc, revealed ? revealed.has(lesson.id + ':' + sc.id) : i < answersUpTo)}${sc.id === currentSceneId ? '   <== CURRENT SLIDE' : ''}`).join('\n\n');
   return `Lesson: ${lesson.title} (level ${lesson.level})\n\n${body}`.slice(0, 14000);
 }
 
@@ -358,6 +358,7 @@ function summary(l, classes) {
 function createRouter({ auth, findClass }) {
   const router = express.Router();
   const teacher = auth('teacher');
+  const quota = (req, res, next) => store.consumeAI(req.user.id, 'generation') ? next() : res.status(429).json({ error: 'Đã hết hạn mức soạn bài hôm nay (UTC).' });
   const own = (req, res) => {
     const l = store.data.lessons.find((x) => x.id === req.params.id && x.teacherId === req.user.id);
     if (!l) res.status(404).json({ error: 'Không tìm thấy bài giảng.' });
@@ -433,19 +434,20 @@ function createRouter({ auth, findClass }) {
     res.json({ ok: true });
   });
 
-  router.post('/api/lessons/:id/outline', teacher, wrap(async (req, res) => {
+  router.post('/api/lessons/:id/outline', teacher, quota, wrap(async (req, res) => {
     const l = own(req, res);
     if (!l) return;
     const b = req.body || {};
     if (b.sceneCount) l.settings.sceneCount = Math.min(30, Math.max(3, parseInt(b.sceneCount) || l.settings.sceneCount));
     if (b.interactive !== undefined) l.settings.interactive = Math.min(20, Math.max(0, parseInt(b.interactive) || 0));
     l.outline = await generateOutline(l);
+    // Hạn mức được kiểm tra trước mỗi tác vụ AI (middleware bên dưới).
     l.updatedAt = Date.now();
     store.save();
     res.json({ lesson: l });
   }));
 
-  router.post('/api/lessons/:id/generate', teacher, (req, res) => {
+  router.post('/api/lessons/:id/generate', teacher, quota, (req, res) => {
     const l = own(req, res);
     if (!l) return;
     if (!l.outline.length) return res.status(400).json({ error: 'Cần có outline trước khi sinh nội dung.' });
@@ -454,7 +456,7 @@ function createRouter({ auth, findClass }) {
     res.status(202).json({ gen: l.gen });
   });
 
-  router.post('/api/lessons/:id/scenes/:sid/regenerate', teacher, wrap(async (req, res) => {
+  router.post('/api/lessons/:id/scenes/:sid/regenerate', teacher, quota, wrap(async (req, res) => {
     const l = own(req, res);
     if (!l) return;
     const idx = l.scenes.findIndex((x) => x.id === req.params.sid);

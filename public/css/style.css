@@ -262,6 +262,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 .demo-box { background: var(--accent-50); border-radius: 14px; padding: 12px 14px; font-size: 13px; color: #7a5200; margin-top: 16px; }
 .demo-box b { font-weight: 800; }
+.admin-shortcut { border-top: 1px solid rgba(122, 82, 0, .15); margin-top: 10px; padding-top: 10px; }
 .demo-box button { border: 0; background: #fff; border-radius: 8px; padding: 4px 8px; font-weight: 700; cursor: pointer; margin: 4px 4px 0 0; font-size: 12px; }
 
 /* ---------- Toast ---------- */

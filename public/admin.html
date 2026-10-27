@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quản trị · EngLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/operations.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main">
+      <div class="topbar">
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+          <div><h1>Quản trị hệ thống</h1><p>Quản lý lớp học, tài khoản và tài nguyên EngLive.</p></div>
+        </div>
+        <button class="btn btn-outline" id="refresh">Làm mới</button>
+      </div>
+      <div id="error" class="form-error" role="alert"></div><div id="stats" class="stats"></div><div id="tabs" class="op-tabs"></div><div id="content" aria-live="polite"></div>
+    </main>
+  </div>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="/js/common.js"></script><script src="/js/admin.js"></script>
+</body>
+</html>

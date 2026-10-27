@@ -2,7 +2,7 @@
 // (mesh) và giáo viên có thể "đi tuần" vào từng nhóm. Máy chủ chỉ chia nhóm, giữ quyền và chuyển tiếp tín hiệu.
 // Trạng thái: live.breakout = { groups: [{ id, name, members: [socketId], visitor: socketId|null }], startedAt, endsAt, timer }
 
-function init({ io, lives }) {
+function init({ io, lives, lk, onGroupStart }) {
   const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
 
   const memberInfo = (live, sid) => { const v = live.viewers.get(sid); return v ? { socketId: sid, name: v.name } : null; };
@@ -25,6 +25,7 @@ function init({ io, lives }) {
     clearTimeout(b.timer);
     for (const g of b.groups) for (const m of g.members) io.to(m).emit('breakout:ended', { reason });
     live.breakout = null;
+    if (lk && lk.enabled) lk.endRooms(classId, b.groups.map((g) => g.id), false); // đóng các phòng nhóm LiveKit (kể cả giáo viên đang ghé thăm)
     pushTeacher(live);
     if (live.teacherSocket) io.to(live.teacherSocket).emit('breakout:ended', { reason });
   }
@@ -42,7 +43,7 @@ function init({ io, lives }) {
     const user = socket.data.user;
     const teacherLive = () => {
       const live = lives.get(socket.data.classId);
-      return live && live.teacherSocket === socket.id && user.role === 'teacher' ? live : null;
+      return live && live.teacherSocket === socket.id && ['teacher', 'admin'].includes(user.role) ? live : null;
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
 
@@ -51,6 +52,7 @@ function init({ io, lives }) {
       if (!live) return reply(ack)({ error: 'Không có quyền.' });
       const ids = [...live.viewers.keys()];
       if (ids.length < 2) return reply(ack)({ error: 'Cần ít nhất 2 học sinh trong phòng để chia nhóm.' });
+      if (onGroupStart) onGroupStart(live, socket.data.classId);
       if (live.breakout) end(live, socket.data.classId, 'Giáo viên chia nhóm lại.');
       const n = Math.min(5, Math.max(2, parseInt(size) || 2));
       const shuffled = shuffle(ids);
@@ -59,7 +61,7 @@ function init({ io, lives }) {
       // Người lẻ cuối cùng (một mình) được gộp vào nhóm trước đó
       if (groups.length > 1 && groups[groups.length - 1].length === 1) groups[groups.length - 2].push(groups.pop()[0]);
       const mins = Math.min(60, Math.max(0, parseInt(minutes) || 0));
-      const b = live.breakout = { groups: groups.map((members, i) => ({ id: 'g' + (i + 1), name: 'Nhóm ' + (i + 1), members, visitor: null })), startedAt: Date.now(), endsAt: mins ? Date.now() + mins * 60000 : null, timer: null };
+      const b = live.breakout = { groups: groups.map((members, i) => ({ id: 'g' + (i + 1), name: 'Nhóm ' + (i + 1), members, userIds: members.map(sid => live.viewers.get(sid).userId), visitor: null })), startedAt: Date.now(), endsAt: mins ? Date.now() + mins * 60000 : null, timer: null };
       if (mins) b.timer = setTimeout(() => end(live, socket.data.classId, 'Hết giờ thảo luận nhóm.'), mins * 60000 + 300);
       for (const g of b.groups) {
         const members = g.members.map((m) => memberInfo(live, m)).filter(Boolean);
@@ -103,7 +105,20 @@ function init({ io, lives }) {
     });
   }
 
-  return { attach, onViewerGone, end, teacherState };
+  // Nhóm mà một người dùng (theo userId, không phải socketId) đang thuộc về; dùng khi cấp token LiveKit cho phòng nhóm
+  function groupForUser(live, userId) {
+    return (live.breakout && live.breakout.groups.find((g) => g.members.some((m) => (live.viewers.get(m) || {}).userId === userId))) || null;
+  }
+
+  function rejoin(live, socketId, userId) {
+    const b = live.breakout, g = b && b.groups.find(g => (g.userIds || []).includes(userId));
+    if (!g) return null;
+    if (!g.members.includes(socketId)) g.members.push(socketId);
+    pushTeacher(live);
+    return { groupId: g.id, name: g.name, members: g.members.map(m => memberInfo(live, m)).filter(Boolean), endsInMs: b.endsAt ? Math.max(0, b.endsAt - Date.now()) : null };
+  }
+
+  return { attach, onViewerGone, end, teacherState, groupForUser, rejoin };
 }
 
 module.exports = { init };

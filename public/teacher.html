@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/classes.css" />
 </head>
 <body>
   <div class="app">
@@ -27,18 +28,24 @@
         </div>
       </div>
 
+      <section id="classCollection">
       <div class="stats" id="stats"></div>
-
       <div class="section-title" id="classes"><h2>Lớp học của tôi</h2></div>
+      <div id="classTools"></div>
       <div class="class-grid" id="classGrid"></div>
-
-      <div id="detail"></div>
+      <nav class="catalog-pagination" id="classPagination" aria-label="Phân trang lớp học"></nav>
+      </section>
+      <section id="classDetail" class="catalog-detail" hidden>
+        <button class="btn btn-outline catalog-back" id="backToClasses"><i data-lucide="arrow-left"></i> Danh sách lớp</button>
+        <div id="detail"></div>
+      </section>
     </main>
   </div>
 
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/class-directory.js"></script>
   <script src="/js/teacher.js"></script>
 </body>
 </html>

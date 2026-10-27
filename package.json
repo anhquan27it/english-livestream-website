@@ -7,7 +7,14 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node tests/smoke.js",
-    "dev:mock": "node tests/dev-mock.js"
+    "admin:create": "node scripts/create-admin.js",
+    "backup:restore": "node scripts/restore-backup.js",
+    "test:load": "node tests/load-control.js",
+    "dev:qa": "node tests/ui-server.js",
+    "dev:mock": "node tests/dev-mock.js",
+    "dev:mock:lk": "node tests/dev-mock-lk.js",
+    "livekit:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/livekit-dev.ps1",
+    "start:lk": "node scripts/start-lk.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +22,7 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^4.22.3",
+    "livekit-server-sdk": "^2.19.2",
     "socket.io": "^4.8.4",
     "unpdf": "^1.9.1"
   },

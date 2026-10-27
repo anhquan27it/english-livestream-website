@@ -10,12 +10,12 @@ const Auth = {
     localStorage.removeItem('englive_token');
     localStorage.removeItem('englive_user');
   },
-  home(user) { return user && user.role === 'teacher' ? '/teacher.html' : '/student.html'; },
+  home(user) { return user && user.role === 'admin' ? '/admin.html' : user && user.role === 'teacher' ? '/teacher.html' : user && user.role === 'assistant' ? '/learning.html' : '/student.html'; },
   // Chặn trang nếu chưa đăng nhập hoặc sai vai trò
   require(role) {
     const user = this.user;
     if (!this.token || !user) { location.href = '/?login=1'; return null; }
-    if (role && user.role !== role) { location.href = this.home(user); return null; }
+    if (role && user.role !== role && !(role === 'teacher' && user.role === 'admin')) { location.href = this.home(user); return null; }
     return user;
   },
   async logout() {
@@ -31,12 +31,14 @@ async function api(url, { method = 'GET', body } = {}) {
     headers: { 'Content-Type': 'application/json', ...(Auth.token ? { Authorization: 'Bearer ' + Auth.token } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => null);
   if (res.status === 401 && !url.includes('/login')) {
     Auth.clear();
     location.href = '/?login=1';
   }
-  if (!res.ok) throw new Error(data.error || 'Đã có lỗi xảy ra.');
+  if (res.status === 404 && !data) throw new Error('Máy chủ đang chạy bản cũ, chưa có chức năng này. Trong terminal đang chạy server, bấm Ctrl+C rồi chạy lại npm start, sau đó tải lại trang.');
+  if (!res.ok) throw new Error((data && data.error) || 'Máy chủ trả lỗi HTTP ' + res.status + '. Hãy thử lại.');
+  if (!data) throw new Error('Máy chủ không trả dữ liệu hợp lệ. Hãy tải lại trang hoặc kiểm tra server.');
   return data;
 }
 
@@ -123,8 +125,24 @@ function speak(text) {
   speechSynthesis.speak(u);
 }
 
+let scheduleReminderTimer = null;
 // Sidebar dùng chung cho trang giáo viên/học sinh
 function setupShell(user) {
+  if (!scheduleReminderTimer) {
+    const remind = async () => {
+      if (!Auth.token) return;
+      try {
+        const d = await api('/api/learning/reminders');
+        for (const s of d.schedules) {
+          const left = s.startsAt - Date.now(), key = 'englive-reminder:' + s.id;
+          if (left > 0 && left <= 15 * 60000 && !sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, '1'); toast('Sắp học: ' + s.title + ' · ' + new Date(s.startsAt).toLocaleString('vi-VN'));
+          }
+        }
+      } catch { /* nhắc lại ở lần sau */ }
+    };
+    remind(); scheduleReminderTimer = setInterval(remind, 60000);
+  }
   document.querySelectorAll('[data-me-name]').forEach((el) => (el.textContent = user.name));
   document.querySelectorAll('[data-me-avatar]').forEach((el) => (el.outerHTML = avatar(user.name, 'round')));
   document.querySelectorAll('[data-logout]').forEach((el) => (el.onclick = () => Auth.logout()));
@@ -137,6 +155,15 @@ function setupShell(user) {
 
 function connectSocket() {
   return io({ auth: { token: Auth.token } });
+}
+
+function devicePreferences(kind) {
+  try { const d = JSON.parse(localStorage.getItem('englive_devices') || '{}'); const id = d[kind]; return id ? { deviceId: { ideal: id } } : {}; } catch { return {}; }
+}
+
+function enterClass(classId, lessonId) {
+  const url = '/live.html?class=' + encodeURIComponent(classId) + (lessonId ? '&lesson=' + encodeURIComponent(lessonId) : '');
+  location.href = '/devices.html?next=' + encodeURIComponent(url);
 }
 
 // Danh sách và trình xem bản ghi buổi học của một lớp
@@ -165,10 +192,12 @@ async function openRecordings(classId, canDelete) {
 
 // Thanh bên dùng chung cho các trang giáo viên / học sinh
 function buildSidebar(role, active) {
-  const nav = role === 'teacher'
-    ? [['overview', '/teacher.html', 'layout-dashboard', 'Tổng quan'], ['lessons', '/lessons.html', 'presentation', 'Bài giảng'], ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI']]
+  const isAdmin = Auth.user && Auth.user.role === 'admin';
+  const nav = isAdmin ? [['admin', '/admin.html', 'shield-check', 'Quản trị'], ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI']] : role === 'teacher'
+    ? [['overview', '/teacher.html', 'layout-dashboard', 'Tổng quan'], ['lessons', '/lessons.html', 'presentation', 'Bài giảng']]
     : [['home', '/student.html', 'house', 'Trang chủ'], ['tutor', '/tutor.html', 'bot', 'Hỏi đáp AI']];
-  const promo = role === 'teacher'
+  if (!isAdmin) nav.push(['learning', '/learning.html', 'calendar-days', 'Học tập & lịch học'], ['devices', '/devices.html', 'video', 'Kiểm tra thiết bị']);
+  const promo = isAdmin ? '' : role === 'teacher'
     ? '<div class="promo"><span class="emoji">🎙️</span><b>Teaching tip</b><p>Soạn bài trước, chiếu slide và chơi game để lớp học sôi động hơn.</p></div>'
     : '<div class="promo" style="background:linear-gradient(150deg,#ff8a3d,#f43f6e)"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
   document.getElementById('sidebar').innerHTML = `
@@ -176,6 +205,7 @@ function buildSidebar(role, active) {
     <nav class="side-nav">${nav.map(([id, href, ic, label]) => `<a href="${href}" class="${id === active ? 'active' : ''}"><i data-lucide="${ic}"></i> ${label}</a>`).join('')}
       ${role === 'student' && active === 'home' ? '<a href="#" id="joinNav"><i data-lucide="key-round"></i> Nhập mã lớp</a>' : ''}</nav>
     <div class="side-foot">${promo}
-      <div class="me"><span data-me-avatar></span><div class="info"><b data-me-name></b><small>${role === 'teacher' ? 'Giáo viên' : 'Học sinh'}</small></div>
+      <div class="me"><span data-me-avatar></span><div class="info"><b data-me-name></b><small>${({admin:'Quản trị viên',teacher:'Giáo viên',assistant:'Trợ giảng',student:'Học sinh'})[Auth.user?.role] || 'Người dùng'}</small></div>
       <button class="icon-btn" data-logout title="Đăng xuất"><i data-lucide="log-out"></i></button></div></div>`;
+  icons();
 }

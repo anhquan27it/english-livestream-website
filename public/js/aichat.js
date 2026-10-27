@@ -1,7 +1,17 @@
 // Chat box AI dùng chung: AiChat.mount(el, { classId, lessonId, dark, onLessonInfo })
 const AiChat = (() => {
-  // Markdown rất nhẹ: **đậm**, `mã`, xuống dòng. Luôn escape trước để tránh chèn HTML.
-  const fmt = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  // AI đôi khi trả LaTeX ($\rightarrow$, \text{...}) hoặc *nghiêng*: đổi thành chữ thường để không hiện ký tự lạ.
+  const cleanMath = (t) => t
+    .replace(/\\(?:long)?rightarrow|\\to\b/g, '→')
+    .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\\times/g, '×')
+    .replace(/\$(?=[^\s\d$])([^$\n]{1,100}?)(?<=\S)\$/g, '$1'); // $...$ (không đụng "$5")
+  // Markdown rất nhẹ: **đậm**, *nghiêng*, `mã`, gạch đầu dòng, xuống dòng. Luôn escape trước để tránh chèn HTML.
+  const fmt = (t) => esc(cleanMath(t))
+    .replace(/^(\s*)[*-] /gm, '$1• ')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)(?<!\s)\*(?!\*)/g, '$1<i>$2</i>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
 
   function mount(el, opts) {
     const state = { busy: false, messages: [], lessonId: opts.lessonId || null };

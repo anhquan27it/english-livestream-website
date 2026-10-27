@@ -1,16 +1,20 @@
 // Smoke test end-to-end: mock LLM + server thật + socket.io-client.   Chạy: npm test
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { io } = require('socket.io-client');
+const { TokenVerifier } = require('livekit-server-sdk');
+const LK_SECRET = 'smoke-test-livekit-secret-0123456789abcdef';
+const lkVerify = async (jwt) => (await new TokenVerifier('testkey', LK_SECRET).verify(jwt)).video;
 const { createServer } = require('./mock-llm');
 
 const PORT = 3900 + Math.floor(Math.random() * 90);
 const BASE = `http://127.0.0.1:${PORT}`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'englive-'));
-let server, mock, passed = 0;
+let server, mock, mediaMock, passed = 0;
+const mediaCalls = [];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function api(token, method, url, body, raw) {
@@ -21,7 +25,7 @@ async function api(token, method, url, body, raw) {
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }
-const login = async (email) => (await api(null, 'POST', '/api/login', { email, password: '123456' })).body.token;
+const login = async (email, password = '123456') => (await api(null, 'POST', '/api/login', { email, password })).body.token;
 async function test(name, fn) {
   try { await fn(); passed++; console.log('  ✓', name); } catch (e) { console.error('  ✗', name, '\n', e); throw e; }
 }
@@ -53,16 +57,23 @@ function tinyPdf(text) {
 async function main() {
   mock = createServer();
   await new Promise((r) => mock.listen(0, r));
+  mediaMock = require('http').createServer((req, res) => { let body = ''; req.on('data', c => body += c); req.on('end', () => { mediaCalls.push({ path: req.url, body: JSON.parse(body || '{}') }); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}'); }); });
+  await new Promise(r => mediaMock.listen(0, '127.0.0.1', r));
+  const mediaUrl = 'ws://127.0.0.1:' + mediaMock.address().port;
   process.env.MOCK_KEY = 'secret-test-key';
   const mockUrl = `http://127.0.0.1:${mock.address().port}`;
-  server = spawn(process.execPath, ['server.js'], {
+  const bootstrap = spawnSync(process.execPath, ['scripts/create-admin.js', 'admin@test.com'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DATA_DIR: dataDir, ADMIN_PASSWORD: 'admin-test-password' }, encoding: 'utf8' });
+  assert.equal(bootstrap.status, 0, bootstrap.stderr);
+  const serverOptions = {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT, DATA_DIR: dataDir, AI_BASE_URL: mockUrl, AI_API_KEY: 'secret-test-key', AI_MODEL: 'ag/gemini-3.8-flash-high' },
+    env: { ...process.env, PORT, DATA_DIR: dataDir, AI_BASE_URL: mockUrl, AI_API_KEY: 'secret-test-key', AI_MODEL: 'ag/gemini-3.8-flash-high', LIVEKIT_URL: mediaUrl, LIVEKIT_API_KEY: 'testkey', LIVEKIT_API_SECRET: LK_SECRET },
     stdio: ['ignore', 'inherit', 'inherit'],
-  });
+  };
+  server = spawn(process.execPath, ['server.js'], serverOptions);
   for (let i = 0; i < 50; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await sleep(100); }
 
   const T = await login('teacher@demo.com');
+  const A = await login('admin@test.com', 'admin-test-password');
   const S1 = await login('student1@demo.com');
   const S3 = await login('student3@demo.com'); // đang chờ duyệt ở lớp A2, không thuộc lớp IELTS
   const classes = (await api(T, 'GET', '/api/classes')).body.classes;
@@ -74,31 +85,31 @@ async function main() {
     assert.equal((await api(S1, 'PUT', '/api/ai/settings', {})).status, 403);
   });
   await test('mặc định 9Router + model gemini-3.8-flash-high, không lộ khoá', async () => {
-    const { settings } = (await api(T, 'GET', '/api/ai/settings')).body;
+    const { settings } = (await api(A, 'GET', '/api/ai/settings')).body;
     assert.equal(settings.active.model, 'ag/gemini-3.8-flash-high');
     assert.equal(settings.providers[0].hasKey, true);
     assert.ok(!JSON.stringify(settings).includes('secret-test-key'));
   });
   await test('test kết nối + lấy danh sách model', async () => {
-    const r = await api(T, 'POST', '/api/ai/test', { providerId: '9router', model: 'ag/gemini-3.8-flash-high' });
+    const r = await api(A, 'POST', '/api/ai/test', { providerId: '9router', model: 'ag/gemini-3.8-flash-high' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.reply, 'OK');
-    const m = await api(T, 'GET', '/api/ai/models/9router');
+    const m = await api(A, 'GET', '/api/ai/models/9router');
     assert.deepEqual(m.body.models, ['ag/gemini-3.8-flash-high', 'ag/gemini-3.8-flash-low']);
   });
   await test('sai khoá API báo lỗi rõ ràng; thêm nhà cung cấp thứ hai giữ nguyên khoá cũ', async () => {
-    const { settings } = (await api(T, 'GET', '/api/ai/settings')).body;
+    const { settings } = (await api(A, 'GET', '/api/ai/settings')).body;
     const bad = settings.providers.map((p) => ({ ...p, apiKey: 'wrong' }));
-    const put = await api(T, 'PUT', '/api/ai/settings', { providers: bad, active: settings.active });
+    const put = await api(A, 'PUT', '/api/ai/settings', { providers: bad, active: settings.active });
     assert.equal(put.status, 200);
-    const r = await api(T, 'POST', '/api/ai/test', { providerId: '9router', model: 'x' });
+    const r = await api(A, 'POST', '/api/ai/test', { providerId: '9router', model: 'x' });
     assert.equal(r.status, 502);
     assert.match(r.body.error, /khoá API/);
     // gửi lại không kèm apiKey -> giữ "wrong"; khôi phục khoá đúng và thêm provider
-    const good = (await api(T, 'PUT', '/api/ai/settings', { providers: [{ id: '9router', name: '9Router', baseUrl: mockUrl, apiKey: 'secret-test-key', models: ['ag/gemini-3.8-flash-high'] }, { name: 'Khác', baseUrl: 'localhost:11434', models: ['llama'] }], active: settings.active })).body.settings;
+    const good = (await api(A, 'PUT', '/api/ai/settings', { providers: [{ id: '9router', name: '9Router', baseUrl: mockUrl, apiKey: 'secret-test-key', models: ['ag/gemini-3.8-flash-high'] }, { name: 'Khác', baseUrl: 'localhost:11434', models: ['llama'] }], active: settings.active })).body.settings;
     assert.equal(good.providers.length, 2);
     assert.equal(good.providers[1].baseUrl, 'http://localhost:11434/v1');
-    assert.equal((await api(T, 'POST', '/api/ai/test', { providerId: '9router', model: 'x' })).status, 200);
+    assert.equal((await api(A, 'POST', '/api/ai/test', { providerId: '9router', model: 'x' })).status, 200);
   });
 
   console.log('Soạn bài giảng');
@@ -154,13 +165,28 @@ async function main() {
   });
   await test('giáo viên khác/học sinh không truy cập được bài giảng', async () => {
     assert.equal((await api(S1, 'GET', `/api/lessons/${lessonId}`)).status, 403);
-    const other = (await api(null, 'POST', '/api/register', { name: 'Other T', email: 'other@t.com', password: '123456', role: 'teacher' })).body.token;
+    const registered = await api(null, 'POST', '/api/register', { name: 'Other T', email: 'other@t.com', password: '123456', role: 'teacher' });
+    assert.equal(registered.status, 202);
+    assert.equal((await api(null, 'POST', '/api/login', { email: 'other@t.com', password: '123456' })).status, 403);
+    const overview = (await api(A, 'GET', '/api/admin/overview')).body;
+    const pending = overview.users.find(u => u.email === 'other@t.com');
+    await api(A, 'PATCH', '/api/admin/users/' + pending.id, { status: 'active' });
+    const other = await login('other@t.com');
     assert.equal((await api(other, 'GET', `/api/lessons/${lessonId}`)).status, 404);
   });
 
   console.log('Trình chiếu & hoạt động trực tiếp');
   const quizIdx = scenes.findIndex((s) => s.type === 'quiz');
   const quiz = scenes[quizIdx];
+  console.log('LiveKit (token & quyền)');
+  await test('cấu hình LiveKit hiển thị cho trình duyệt; chưa lên sóng thì không cấp token', async () => {
+    const cfg = (await api(S1, 'GET', '/api/config')).body.livekit;
+    assert.equal(cfg.enabled, true);
+    assert.equal(cfg.url, mediaUrl);
+    assert.equal((await api(S1, 'GET', '/api/config')).body.livekit.secret, undefined);
+    assert.equal((await api(T, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 409);
+    assert.equal((await api(null, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 401);
+  });
   await test('học sinh ngoài lớp không vào được phòng/chat AI', async () => {
     await api(T, 'POST', `/api/classes/${ielts.id}/live`, { title: 'Live test' });
     const s3 = await connect(S3);
@@ -182,6 +208,20 @@ async function main() {
     assert.equal(st.total, 6);
     assert.equal(st.scene.type, 'slide');
     assert.equal((await emit(ss, 'lesson:present', { lessonId })).error !== undefined, true, 'học sinh không được điều khiển');
+  });
+  await test('token LiveKit: giáo viên được phát, học sinh chỉ xem; người ngoài lớp bị từ chối', async () => {
+    const tt = (await api(T, 'POST', '/api/livekit/token', { classId: ielts.id })).body;
+    const tc = await lkVerify(tt.token);
+    assert.equal(tc.room, 'cls_' + ielts.id);
+    assert.equal(tc.canPublish, true);
+    const st = (await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).body;
+    const sc = await lkVerify(st.token);
+    assert.equal(sc.room, 'cls_' + ielts.id);
+    assert.ok(!sc.canPublish, 'học sinh không được phát khi chưa được cho phát biểu');
+    assert.equal(sc.canSubscribe, true);
+    assert.equal(st.identity, (await api(S1, 'GET', '/api/me')).body.user.id);
+    assert.equal((await api(S3, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 403);
+    assert.equal((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id, groupId: 'g1' })).status, 404, 'chưa có phòng nhóm');
   });
   await test('giáo viên thấy trước slide tiếp theo (đầy đủ); học sinh không nhận nội dung slide sau', async () => {
     const tGot = nextEvent(ts, 'lesson:state', (s) => s && s.index === 1);
@@ -271,6 +311,9 @@ async function main() {
     assert.ok((await emit(ts, 'speak:grant', { socketId: ss.id })).ok);
     await granted;
     assert.equal((await spk).socketId, ss.id);
+    const spkClaims = await lkVerify((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).body.token);
+    assert.equal(spkClaims.canPublish, true, 'người đang phát biểu được phép phát');
+    assert.deepEqual(spkClaims.canPublishSources, ['microphone'], 'chỉ được phát micro');
     const revoked = nextEvent(ss, 'speak:revoked');
     const spk2 = nextEvent(s2, 'speaker', (x) => x && x.socketId === s2.id);
     await emit(ts, 'speak:grant', { socketId: s2.id });
@@ -279,6 +322,7 @@ async function main() {
     const none = nextEvent(ss, 'speaker', (x) => x === null);
     assert.ok((await emit(ts, 'speak:revoke')).ok);
     await none;
+    assert.ok(!(await lkVerify((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).body.token)).canPublish, 'thu mic thì token mới không còn quyền phát');
     assert.ok((await emit(ss, 'speak:revoke')).error, 'học sinh không thu mic của người khác');
   });
   await test('học sinh đang phát biểu rời phòng thì mic được thu lại', async () => {
@@ -457,6 +501,12 @@ async function main() {
     assert.equal(g1.groupId, g2.groupId);
     assert.equal(g1.members.length, 2);
     assert.ok(g1.endsInMs > 250000);
+    const gTeacher = await lkVerify((await api(T, 'POST', '/api/livekit/token', { classId: ielts.id, groupId: g1.groupId })).body.token);
+    assert.equal(gTeacher.room, `cls_${ielts.id}__${g1.groupId}`);
+    const gStudent = await lkVerify((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id, groupId: g1.groupId })).body.token);
+    assert.equal(gStudent.canPublish, true);
+    assert.deepEqual(gStudent.canPublishSources.sort(), ['camera', 'microphone']);
+    assert.equal((await api(S3, 'POST', '/api/livekit/token', { classId: ielts.id, groupId: g1.groupId })).status, 403, 'người ngoài lớp không vào được phòng nhóm');
     assert.equal((await st).groups[0].members.length, 2);
     // tín hiệu giữa hai thành viên được chuyển; tới giáo viên (chưa ghé thăm) thì bị chặn
     const sig = nextEvent(s2b, 'bo:signal');
@@ -544,17 +594,25 @@ async function main() {
   await test('hỏi đáp chung (không có bài) và lỗi AI không lộ chi tiết cho học sinh', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is present perfect?' });
     assert.equal(r.status, 200);
-    await api(T, 'PUT', '/api/ai/settings', { providers: [{ id: '9router', name: '9Router', baseUrl: 'http://127.0.0.1:9', models: ['m'] }], active: { providerId: '9router', model: 'm' } });
+    await api(A, 'PUT', '/api/ai/settings', { providers: [{ id: '9router', name: '9Router', baseUrl: 'http://127.0.0.1:9', models: ['m'] }], active: { providerId: '9router', model: 'm' } });
     const bad = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'hello' });
     assert.equal(bad.status, 502);
     assert.ok(!bad.body.error.includes('127.0.0.1'));
   });
+  const restart = async () => {
+    const exited = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await exited;
+    server = spawn(process.execPath, ['server.js'], serverOptions);
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + '/healthz')).ok) return; } catch {} await sleep(100); }
+    throw new Error('Không khởi động lại được server kiểm thử.');
+  };
+  await require('./operations-smoke')({ api, test, connect, emit, nextEvent, sleep, restart, A, T, S1, S2, S3, classes, ielts, lessonId, scenes, quizIdx, quiz, mockUrl, dataDir, login, mediaCalls });
 }
 
-main().then(() => { console.log(`\nOK — ${passed} kiểm tra đạt`); cleanup(0); }, () => cleanup(1));
+main().then(() => { console.log(`\nOK — ${passed} kiểm tra đạt`); cleanup(0); }, (e) => { console.error(e); cleanup(1); });
 function cleanup(code) {
   if (server) server.kill();
   if (mock) mock.close();
+  if (mediaMock) mediaMock.close();
   fs.rmSync(dataDir, { recursive: true, force: true });
   process.exit(code);
 }

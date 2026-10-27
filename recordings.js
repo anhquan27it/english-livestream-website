@@ -27,27 +27,36 @@ function createRouter({ auth, findClass, canAccess }) {
   router.post('/api/classes/:id/recordings', auth('teacher'), (req, res) => {
     const c = findClass(req.params.id);
     if (!c || c.teacherId !== req.user.id) return res.status(404).json({ error: 'Không tìm thấy lớp học.' });
+    let title;
+    try { title = decodeURIComponent(String(req.headers['x-title'] || 'Buổi học')).slice(0, 120); }
+    catch { return res.status(400).json({ error: 'Tên bản ghi không hợp lệ.' }); }
+    const storage = require('./storage');
+    if (!storage.available(1)) return res.status(413).json({ error: 'Đã hết dung lượng lưu trữ. Liên hệ admin.' });
     fs.mkdirSync(DIR, { recursive: true });
     const id = store.id('rec');
     const file = path.join(DIR, id + '.webm');
+    const allocation = storage.reserve(file);
     const out = fs.createWriteStream(file);
     let size = 0;
     let failed = false;
     const fail = (status, msg) => {
       if (failed) return;
       failed = true;
+      allocation.release();
       out.destroy();
       fs.rm(file, { force: true }, () => {});
       if (!res.headersSent) res.status(status).json({ error: msg });
     };
-    req.on('data', (chunk) => { size += chunk.length; if (size > MAX_BYTES) { fail(413, 'Bản ghi vượt quá 500 MB.'); req.destroy(); } });
+    req.on('data', (chunk) => { if (failed) return; size += chunk.length; if (size > MAX_BYTES || !allocation.grow(chunk.length)) { fail(413, 'Bản ghi vượt giới hạn 500 MB hoặc dung lượng còn lại.'); req.unpipe(out); req.resume(); } });
+    req.on('aborted', () => fail(400, 'Tải lên bị gián đoạn.'));
     req.on('error', () => fail(400, 'Tải lên bị gián đoạn.'));
     out.on('error', () => fail(500, 'Không ghi được tệp.'));
     out.on('finish', () => {
+      allocation.release();
       if (failed) return;
       if (size < 1000) return fail(400, 'Bản ghi rỗng.');
       const rec = {
-        id, classId: c.id, title: decodeURIComponent(String(req.headers['x-title'] || 'Buổi học')).slice(0, 120),
+        id, classId: c.id, title,
         durationSec: Math.max(0, parseInt(req.headers['x-duration']) || 0), size, createdAt: Date.now(), file: id + '.webm',
       };
       store.data.recordings.push(rec);

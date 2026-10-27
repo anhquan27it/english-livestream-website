@@ -1,6 +1,25 @@
 const me = Auth.require('teacher');
 let classes = [];
 let selectedId = null;
+let collectionScroll = 0;
+const directory = new ClassDirectory('teacher', renderClassList);
+
+document.getElementById('backToClasses').onclick = () => {
+  selectedId = null;
+  renderDetail();
+  window.scrollTo({ top: collectionScroll });
+  document.querySelector(`[data-manage="${lastOpenedId}"]`)?.focus({ preventScroll: true });
+};
+let lastOpenedId = null;
+
+function manageClass(id) {
+  collectionScroll = window.scrollY;
+  selectedId = lastOpenedId = id;
+  renderDetail();
+  window.scrollTo({ top: 0 });
+  document.getElementById('backToClasses').focus({ preventScroll: true });
+  icons();
+}
 
 if (me) {
   buildSidebar('teacher', 'overview');
@@ -15,7 +34,7 @@ async function load() {
   try {
     const data = await api('/api/classes');
     classes = data.classes;
-    if (!classes.find((c) => c.id === selectedId)) selectedId = classes[0] && classes[0].id;
+    if (!classes.find((c) => c.id === selectedId)) selectedId = null;
     render();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -32,57 +51,55 @@ function render() {
     ['radio', 'tone-pink', live ? `${live} live` : sessions, live ? 'Đang phát trực tiếp' : 'Buổi đã dạy'],
   ].map(([ic, tone, v, l]) => `<div class="stat"><div class="ic ${tone}"><i data-lucide="${ic}"></i></div><div><b>${v}</b><small>${l}</small></div></div>`).join('');
 
-  const grid = document.getElementById('classGrid');
-  grid.innerHTML = classes.length ? classes.map(classCard).join('') : `
-    <div class="card empty" style="grid-column:1/-1"><div class="emoji">🏫</div><b>Bạn chưa có lớp học nào</b>Tạo lớp đầu tiên để mời học sinh và bắt đầu livestream.<br /><br />
-    <button class="btn btn-primary" onclick="newClass()"><i data-lucide="plus"></i> Tạo lớp mới</button></div>`;
-  grid.querySelectorAll('[data-class]').forEach((el) => (el.onclick = (e) => {
-    if (e.target.closest('button')) return;
-    selectedId = el.dataset.class;
-    render();
-    document.getElementById('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }));
-  grid.querySelectorAll('[data-golive]').forEach((b) => (b.onclick = () => startLive(b.dataset.golive)));
-
+  directory.setItems(classes);
   renderDetail();
   icons();
 }
 
+function renderClassList(items) {
+  const grid = document.getElementById('classGrid');
+  grid.innerHTML = classes.length ? items.map(classCard).join('') : `
+    <div class="card empty" style="grid-column:1/-1"><div class="emoji">🏫</div><b>Bạn chưa có lớp học nào</b>Tạo lớp đầu tiên để mời học sinh và bắt đầu livestream.<br /><br />
+    <button class="btn btn-primary" onclick="newClass()"><i data-lucide="plus"></i> Tạo lớp mới</button></div>`;
+  grid.querySelectorAll('[data-manage]').forEach((b) => (b.onclick = () => manageClass(b.dataset.manage)));
+  grid.querySelectorAll('[data-golive]').forEach((b) => (b.onclick = () => startLive(b.dataset.golive)));
+
+}
+
 function classCard(c) {
-  return `<article class="class-card ${c.id === selectedId ? 'selected' : ''}" data-class="${c.id}">
-    <div class="class-cover cover-${c.color}">
-      <span class="level">${esc(c.level)}</span>
-      ${c.live ? '<span class="badge-live" style="position:relative;z-index:1">LIVE</span>' : ''}
-      <span class="emoji">${CLASS_EMOJI[c.color] || '📘'}</span>
-    </div>
-    <div class="class-body">
-      <h3>${esc(c.name)}</h3>
+  return `<article class="catalog-card">
+    <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
+    <div class="catalog-summary">
+      <div class="catalog-heading"><h3>${esc(c.name)}</h3><span class="chip chip-muted">${esc(c.level)}</span>${c.live ? '<span class="badge-live">LIVE</span>' : ''}</div>
       <p>${esc(c.description || 'Chưa có mô tả.')}</p>
       <div class="class-meta">
         <span><i data-lucide="users"></i>${c.students.length} học sinh</span>
         <span><i data-lucide="video"></i>${c.history.length} buổi</span>
+        <span class="catalog-code" title="Mã lớp"><i data-lucide="key-round"></i>${esc(c.code)}</span>
         ${c.pending.length ? `<span class="chip chip-warn">${c.pending.length} chờ duyệt</span>` : ''}
       </div>
-      <div class="class-foot">
-        <span class="chip chip-muted"><i data-lucide="key-round"></i>${esc(c.code)}</span>
+    </div>
+      <div class="catalog-actions">
+        <button class="btn btn-outline btn-sm" data-manage="${c.id}" aria-label="Quản lý lớp ${esc(c.name)}">Quản lý lớp</button>
         ${c.live
           ? `<button class="btn btn-live btn-sm" data-golive="${c.id}"><i data-lucide="radio"></i> Vào phòng live</button>`
           : `<button class="btn btn-primary btn-sm" data-golive="${c.id}"><i data-lucide="video"></i> Livestream</button>`}
       </div>
-    </div>
   </article>`;
 }
 
 function renderDetail() {
   const el = document.getElementById('detail');
   const c = classes.find((x) => x.id === selectedId);
+  document.getElementById('classCollection').hidden = !!c;
+  document.getElementById('classDetail').hidden = !c;
   if (!c) { el.innerHTML = ''; return; }
   el.innerHTML = `
     <div class="card" style="margin-top:28px">
       <div class="detail-head">
         <div style="display:flex;gap:14px;align-items:center">
           <div class="avatar cover-${c.color}" style="width:52px;height:52px;border-radius:16px;font-size:26px">${CLASS_EMOJI[c.color] || '📘'}</div>
-          <div><h2>${esc(c.name)}</h2><span class="chip chip-muted">Trình độ ${esc(c.level)}</span> ${c.live ? `<span class="badge-live">LIVE · ${c.live.viewers} đang xem</span>` : ''}</div>
+          <div><h2>${esc(c.name)}</h2><span class="chip chip-muted">Trình độ ${esc(c.level)}</span> ${c.live ? `<span class="badge-live">LIVE · ${c.live.viewers} đang xem</span>` : ''}<p class="catalog-description">${esc(c.description || 'Chưa có mô tả.')}</p></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${c.live
@@ -169,7 +186,7 @@ function renderDetail() {
     const act = b.dataset.act;
     if (act === 'recs') openRecordings(c.id, true);
     if (act === 'live') startLive(c.id);
-    if (act === 'enter') location.href = `/live.html?class=${c.id}`;
+    if (act === 'enter') enterClass(c.id);
     if (act === 'end') {
       if (!(await confirmModal('Kết thúc buổi học?', 'Tất cả học sinh sẽ bị ngắt khỏi livestream.', 'Kết thúc'))) return;
       await api(`/api/classes/${c.id}/live`, { method: 'DELETE' });
@@ -221,7 +238,7 @@ document.getElementById('newClassBtn').onclick = newClass;
 
 function startLive(classId) {
   const c = classes.find((x) => x.id === classId);
-  if (c && c.live) { location.href = `/live.html?class=${classId}`; return; }
+  if (c && c.live) { enterClass(classId); return; }
   const m = openModal(`
     <h3>Bắt đầu livestream 🎬</h3><p class="sub">Chỉ ${c.students.length} học sinh trong lớp <b>${esc(c.name)}</b> mới có thể tham gia.</p>
     <form id="liveForm">
@@ -233,7 +250,7 @@ function startLive(classId) {
     e.preventDefault();
     try {
       await api(`/api/classes/${classId}/live`, { method: 'POST', body: { title: e.target.title.value } });
-      location.href = `/live.html?class=${classId}`;
+      enterClass(classId);
     } catch (err) { toast(err.message, 'error'); }
   };
 }

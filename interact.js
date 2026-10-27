@@ -4,7 +4,7 @@ const store = require('./db');
 
 const REACTIONS = ['👍', '❤️', '😂', '👏', '😮', '🎉', '🙋'];
 
-function init({ io, lives, present }) {
+function init({ io, lives, present, lk }) {
   const speakerInfo = (live) => {
     if (!live.speaker) return null;
     const v = live.viewers.get(live.speaker);
@@ -12,12 +12,28 @@ function init({ io, lives, present }) {
   };
 
   // Một học sinh được phát biểu tại một thời điểm
-  function setSpeaker(live, classId, socketId) {
+  async function setSpeaker(live, classId, socketId) {
+    const revision = live.speakerRevision = (live.speakerRevision || 0) + 1;
     const prev = live.speaker;
-    if (prev && prev !== socketId) io.to(prev).emit('speak:revoked', { reason: 'Giáo viên đã thu lại micro.' });
+    const userOf = (sid) => (live.viewers.get(sid) || {}).userId;
+    if (prev && prev !== socketId) {
+      io.to(prev).emit('speak:revoked', { reason: 'Giáo viên đã thu lại micro.' });
+      if (lk && lk.enabled) lk.allowSpeaker(classId, userOf(prev), false);
+    }
     live.speaker = socketId || null;
-    if (socketId) io.to(socketId).emit('speak:granted');
+    if (socketId) {
+      // Với LiveKit: cấp quyền phát xong mới báo cho học sinh bật micro (tránh phát khi quyền chưa có hiệu lực)
+      const userId = userOf(socketId);
+      const allowed = !lk || !lk.enabled || await lk.allowSpeaker(classId, userId, true);
+      if (revision !== live.speakerRevision || live.speaker !== socketId || !live.viewers.has(socketId)) {
+        if (lk && lk.enabled && userOf(live.speaker) !== userId) await lk.allowSpeaker(classId, userId, false);
+        return false;
+      }
+      if (!allowed) { live.speaker = null; io.to(socketId).emit('speak:revoked', { reason: 'Máy chủ video chưa cấp được quyền micro. Hãy nhờ giáo viên thử lại.' }); }
+      else io.to(socketId).emit('speak:granted');
+    }
     io.to('live:' + classId).emit('speaker', speakerInfo(live));
+    return !socketId || live.speaker === socketId;
   }
 
   function onViewerGone(live, classId, socketId) {
@@ -28,15 +44,15 @@ function init({ io, lives, present }) {
     const user = socket.data.user;
     const teacherLive = () => {
       const live = lives.get(socket.data.classId);
-      return live && live.teacherSocket === socket.id && user.role === 'teacher' ? live : null;
+      return live && live.teacherSocket === socket.id && ['teacher', 'admin'].includes(user.role) ? live : null;
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
 
-    socket.on('speak:grant', ({ socketId } = {}, ack) => {
+    socket.on('speak:grant', async ({ socketId } = {}, ack) => {
       const live = teacherLive();
       if (!live || !live.viewers.has(socketId)) return reply(ack)({ error: 'Không tìm thấy học sinh.' });
-      setSpeaker(live, socket.data.classId, socketId);
-      reply(ack)({ ok: true });
+      const ok = await setSpeaker(live, socket.data.classId, socketId);
+      reply(ack)(ok ? { ok: true } : { error: 'Không cấp được quyền micro hoặc quyền đã thay đổi. Hãy thử lại.' });
     });
 
     // Thu mic của người đang nói; muteAll cũng dùng chung vì mỗi lúc chỉ một học sinh có mic

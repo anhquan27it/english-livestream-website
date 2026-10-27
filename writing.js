@@ -25,7 +25,7 @@ function init({ io, lives }) {
     const user = socket.data.user;
     const teacherLive = () => {
       const live = lives.get(socket.data.classId);
-      return live && live.teacherSocket === socket.id && user.role === 'teacher' ? live : null;
+      return live && live.teacherSocket === socket.id && ['teacher', 'admin'].includes(user.role) ? live : null;
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
     const room = () => 'live:' + socket.data.classId;

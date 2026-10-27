@@ -1,4 +1,4 @@
-const me = Auth.require('teacher');
+const me = Auth.require('admin');
 const PRESETS = [
   { name: '9Router (local)', baseUrl: 'http://localhost:20128/v1', models: ['ag/gemini-3.8-flash-high'] },
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o-mini'] },

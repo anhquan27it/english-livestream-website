@@ -11,6 +11,7 @@ let lesson = null;      // bài đang mở (bản đầy đủ)
 let idx = 0;            // slide đang chọn
 let saveTimer = null;
 let pollTimer = null;
+let dirty = false, revision = 0, saving = null, generating = false, lastRoute = location.hash;
 let wizSource = { name: '', text: '' };
 
 if (me) {
@@ -24,6 +25,11 @@ const mobileMenu = `<button class="icon-btn mobile-only" data-menu aria-label="M
 const uid = () => 's_' + Math.random().toString(36).slice(2, 10);
 
 async function route() {
+  if (generating) { if (location.hash !== lastRoute) location.hash = lastRoute; toast('AI đang sinh slide. Hãy chờ xong trước khi đổi trang.'); return; }
+  if (lesson && (dirty || saving)) {
+    if (!(await flush())) { if (location.hash !== lastRoute) location.hash = lastRoute; toast('Chưa lưu được thay đổi. Hãy sửa lỗi hoặc lưu lại trước khi rời bài.', 'error'); return; }
+  }
+  lastRoute = location.hash;
   clearTimeout(pollTimer);
   const h = location.hash.replace(/^#\/?/, '');
   try {
@@ -421,13 +427,17 @@ function paintForm() {
   document.getElementById('aiGo').onclick = async (e) => {
     const b = e.currentTarget;
     b.disabled = true; b.textContent = 'AI đang soạn…';
+    const targetLesson = lesson, sceneId = s.id, instruction = document.getElementById('aiInst').value, type = document.getElementById('aiType').value;
+    generating = true; document.querySelector('.editor').inert = true;
     try {
-      await flush();
-      const d = await api(`/api/lessons/${lesson.id}/scenes/${s.id}/regenerate`, { method: 'POST', body: { instruction: document.getElementById('aiInst').value, type: document.getElementById('aiType').value } });
-      lesson.scenes[idx] = d.scene;
+      if (!(await flush())) throw new Error('Chưa lưu được bài. Hãy sửa các trường còn lỗi trước khi sinh lại.');
+      const d = await api(`/api/lessons/${targetLesson.id}/scenes/${sceneId}/regenerate`, { method: 'POST', body: { instruction, type } });
+      const targetIndex = targetLesson.scenes.findIndex(x => x.id === sceneId);
+      if (targetIndex >= 0) targetLesson.scenes[targetIndex] = d.scene;
       toast('AI đã soạn lại slide', 'success');
       viewEditor();
     } catch (err) { toast(err.message, 'error'); b.disabled = false; b.textContent = 'Sinh lại'; }
+    finally { generating = false; const editor = document.querySelector('.editor'); if (editor) editor.inert = false; }
   };
 }
 
@@ -446,28 +456,35 @@ function paintRailTitles() {
 // ---------- Lưu ----------
 function touch(initial) {
   const st = document.getElementById('saveState');
-  if (initial) { if (st) { st.className = 'saved'; st.textContent = '✓ Đã lưu'; } return; }
+  if (initial) { if (st) { st.className = dirty ? 'saved dirty' : 'saved'; st.textContent = dirty ? 'Đang chờ lưu…' : '✓ Đã lưu'; } return; }
+  dirty = true; revision++;
   if (st) { st.className = 'saved dirty'; st.textContent = 'Đang chỉnh sửa…'; }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 1200);
 }
 
 async function flush() {
+  if (saving) { if (!(await saving)) return false; if (!dirty) return true; }
+  if (!dirty) return true;
   clearTimeout(saveTimer);
   saveTimer = null;
   const st = document.getElementById('saveState');
   const bad = lesson.scenes.map((s, i) => [i, problem(s)]).find(([, p]) => p);
   if (bad) { if (st) { st.className = 'saved dirty'; st.textContent = `Chưa lưu: slide ${bad[0] + 1} — ${bad[1]}`; } return false; }
-  try {
-    await api('/api/lessons/' + lesson.id, { method: 'PUT', body: { title: lesson.title, scenes: lesson.scenes, classIds: lesson.classIds } });
-    if (st) { st.className = 'saved'; st.textContent = '✓ Đã lưu'; }
+  const version = revision;
+  saving = (async () => { try {
+    await api('/api/lessons/' + lesson.id, { method: 'PUT', body: JSON.parse(JSON.stringify({ title: lesson.title, scenes: lesson.scenes, classIds: lesson.classIds })) });
+    dirty = revision !== version;
+    if (dirty) saveTimer = setTimeout(flush, 1200);
+    if (st) { st.className = dirty ? 'saved dirty' : 'saved'; st.textContent = dirty ? 'Đang chờ lưu…' : '✓ Đã lưu'; }
     return true;
   } catch (e) {
     if (st) { st.className = 'saved dirty'; st.textContent = 'Lỗi lưu: ' + e.message; }
     return false;
-  }
+  } })();
+  const ok = await saving; saving = null; return ok;
 }
-addEventListener('beforeunload', (e) => { if (saveTimer) { e.preventDefault(); } });
+addEventListener('beforeunload', (e) => { if (dirty || saving || generating) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---------- Gắn lớp / livestream ----------
 function classModal() {
@@ -476,6 +493,7 @@ function classModal() {
     <div class="modal-actions"><button class="btn btn-outline" data-close>Huỷ</button><button class="btn btn-primary" data-ok>Lưu</button></div>`);
   m.querySelector('[data-ok]').onclick = async () => {
     lesson.classIds = [...m.querySelectorAll('input:checked')].map((i) => i.value);
+    touch();
     m.close();
     if (await flush()) toast('Đã cập nhật lớp', 'success');
     viewEditor();
@@ -493,7 +511,7 @@ function liveModal() {
     try {
       if (!(await flush())) throw new Error('Hãy sửa các slide còn lỗi trước khi chiếu.');
       await api(`/api/classes/${e.target.cid.value}/live`, { method: 'POST', body: { title: e.target.title.value } });
-      location.href = `/live.html?class=${e.target.cid.value}&lesson=${lesson.id}`;
+      enterClass(e.target.cid.value, lesson.id);
     } catch (err) { toast(err.message, 'error'); }
   };
 }
