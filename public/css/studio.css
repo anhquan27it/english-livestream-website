@@ -409,3 +409,46 @@
   .live-body.side-collapsed .live-app { grid-template-columns: 1fr; }
   .live-body.side-collapsed .side-panel { display: none; }
 }
+
+/* ---------- Thanh trên của phòng live và tab khung chat: gọn, chỉ icon ---------- */
+.stage-wrap { padding: 10px 12px 12px; gap: 10px; }
+.live-top { gap: 8px; min-height: 34px; }
+.live-top .left { gap: 10px; }
+.live-top .back { width: 32px; height: 32px; border-radius: 10px; }
+.live-top .back svg { width: 16px; height: 16px; }
+.live-top h1 { font-size: 14px; line-height: 1.2; }
+.live-top small { font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-top .right { gap: 6px; }
+.live-top .right .badge-dark, .live-top .right .badge-live { padding: 4px 8px; font-size: 11px; border-radius: 7px; line-height: 1.2; }
+.live-top .right .badge-dark svg { width: 12px; height: 12px; }
+.live-top .tbtn { width: 30px; height: 30px; border-radius: 9px; }
+.live-top .tbtn svg { width: 15px; height: 15px; }
+
+.panel-tabs { overflow: visible; gap: 4px; padding: 8px 10px; }
+.panel-tabs button { flex: 1; min-width: 0; height: 36px; padding: 0 4px; gap: 4px; position: relative; font-size: 12px; }
+.panel-tabs button svg { width: 18px; height: 18px; flex: none; }
+.panel-tabs .count { padding: 0 6px; font-size: 11px; line-height: 16px; }
+.panel-tabs button[data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: none;
+  background: rgba(10, 8, 24, .95); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 8px; white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+}
+
+/* Thu nhỏ khung camera đang nằm góc dưới khi chiếu slide */
+.pip-btn { position: absolute; z-index: 7; width: 26px; height: 26px; border-radius: 8px; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff; background: rgba(10, 8, 24, .65); backdrop-filter: blur(4px); opacity: .65; transition: opacity .15s, background .15s; }
+.pip-btn svg { width: 15px; height: 15px; }
+.pip-btn:hover { background: rgba(10, 8, 24, .9); }
+.stage:hover .pip-min, .pip-min:focus-visible { opacity: 1; }
+.pip-restore { right: 16px; bottom: 16px; width: 38px; height: 38px; border-radius: 12px; opacity: .9; background: rgba(10, 8, 24, .8); box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+.pip-restore svg { width: 18px; height: 18px; }
+.pip-btn[data-tip]:hover::after { content: attr(data-tip); position: absolute; right: 0; bottom: calc(100% + 8px); background: rgba(10, 8, 24, .95); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 8px; white-space: nowrap; pointer-events: none; }
+.pip-min[data-tip]:hover::after { bottom: auto; top: calc(100% + 8px); }
+.stage.pip-hidden > video { display: none; }
+@media (hover: none) { .pip-min { opacity: 1; } }
+.pip-btn[hidden] { display: none; }
+
+/* Mã lớp trên thanh trên của phòng live */
+.live-top .code-chip { position: relative; cursor: pointer; border: 0; gap: 5px; letter-spacing: .08em; }
+.live-top .code-chip b { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.live-top .code-chip:hover { background: rgba(255, 255, 255, .18); }
+.live-top .code-chip[hidden] { display: none; }
+.live-top .code-chip[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; pointer-events: none; background: rgba(10, 8, 24, .95); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0; padding: 5px 9px; border-radius: 8px; white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }

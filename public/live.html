@@ -22,6 +22,7 @@
           </div>
         </div>
         <div class="right">
+          <button class="badge-dark code-chip" id="codeChip" type="button" hidden data-tip="Mã lớp: bấm để sao chép gửi học sinh" aria-label="Mã lớp"><i data-lucide="key-round"></i><b id="codeText"></b></button>
           <button class="tbtn" id="sideToggle" aria-label="Ẩn/hiện khung chat" data-tip="Ẩn/hiện khung chat"><i data-lucide="panel-right-close"></i></button>
           <span class="badge-dark" id="speakerBadge" hidden style="background:rgba(18,185,129,.35)"></span>
           <span class="badge-live" id="liveBadge" hidden>LIVE</span>
@@ -48,12 +49,12 @@
     <aside class="side-panel">
       <div class="side-resizer" id="sideResizer" role="separator" aria-orientation="vertical" aria-label="Kéo để đổi độ rộng khung chat" title="Kéo để đổi độ rộng · bấm đúp để đặt lại"></div>
       <div class="panel-tabs">
-        <button class="active" data-panel="chat"><i data-lucide="message-circle"></i> Chat</button>
-        <button data-panel="lesson" id="tabLesson" hidden><i data-lucide="presentation"></i> Bài giảng</button>
-        <button data-panel="breakout" id="tabBo" hidden><i data-lucide="users-round"></i> Nhóm</button>
-        <button data-panel="pad" id="tabPad" hidden><i data-lucide="pen-line"></i> Viết</button>
-        <button data-panel="ai" id="tabAi" hidden><i data-lucide="bot"></i> AI</button>
-        <button data-panel="people"><i data-lucide="users"></i> <span id="peopleLabel">Học sinh</span> <span class="count" id="peopleCount">0</span></button>
+        <button class="active" data-panel="chat" data-tip="Chat" aria-label="Chat"><i data-lucide="message-circle"></i></button>
+        <button data-panel="lesson" id="tabLesson" data-tip="Bài giảng" aria-label="Bài giảng" hidden><i data-lucide="presentation"></i></button>
+        <button data-panel="breakout" id="tabBo" data-tip="Nhóm" aria-label="Nhóm" hidden><i data-lucide="users-round"></i></button>
+        <button data-panel="pad" id="tabPad" data-tip="Bảng viết" aria-label="Bảng viết" hidden><i data-lucide="pen-line"></i></button>
+        <button data-panel="ai" id="tabAi" data-tip="Hỏi AI" aria-label="Hỏi AI" hidden><i data-lucide="bot"></i></button>
+        <button data-panel="people" id="tabPeople" data-tip="Học sinh" aria-label="Học sinh"><i data-lucide="users"></i><span class="count" id="peopleCount">0</span><span id="peopleLabel" hidden>Học sinh</span></button>
       </div>
       <div class="panel-body" id="chatPanel"><div class="chat-list" id="chatList"></div></div>
       <div class="panel-body" id="peoplePanel" hidden></div>

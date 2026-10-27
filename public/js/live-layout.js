@@ -55,4 +55,33 @@
 
   // Khung chat đang ẩn mà có tin mới: chấm báo trên nút
   if (chatList) new MutationObserver(() => { if (collapsed()) btn.classList.add('has-new'); }).observe(chatList, { childList: true });
+
+  // Khung camera nhỏ ở góc dưới khi đang chiếu slide: nút "−" để tạm thu nhỏ (khỏi che slide), bấm biểu tượng camera để hiện lại.
+  const stage = document.getElementById('stage'), vid = document.getElementById('video');
+  if (stage && vid) {
+    const min = document.createElement('button');
+    min.className = 'pip-btn pip-min'; min.type = 'button'; min.dataset.tip = 'Thu nhỏ camera'; min.setAttribute('aria-label', 'Thu nhỏ camera');
+    min.innerHTML = '<i data-lucide="minus"></i>';
+    const back = document.createElement('button');
+    back.className = 'pip-btn pip-restore'; back.type = 'button'; back.dataset.tip = 'Hiện lại camera'; back.setAttribute('aria-label', 'Hiện lại camera');
+    back.innerHTML = '<i data-lucide="video"></i>'; back.hidden = true;
+    stage.append(min, back);
+    if (typeof icons === 'function') icons();
+
+    const inPip = () => stage.classList.contains('with-slide') && !stage.classList.contains('swap'); // video đang là khung nhỏ
+    function place() {
+      const hidden = stage.classList.contains('pip-hidden');
+      if (!inPip() && hidden) stage.classList.remove('pip-hidden'); // hết slide hoặc đã đổi khung: camera tự hiện lại
+      const hid = stage.classList.contains('pip-hidden');
+      min.hidden = !inPip() || hid;
+      back.hidden = !inPip() || !hid;
+      if (!min.hidden) { min.style.left = (vid.offsetLeft + vid.offsetWidth - 32) + 'px'; min.style.top = (vid.offsetTop + 6) + 'px'; }
+    }
+    min.onclick = () => { stage.classList.add('pip-hidden'); place(); };
+    back.onclick = () => { stage.classList.remove('pip-hidden'); place(); };
+    new MutationObserver(place).observe(stage, { attributes: true, attributeFilter: ['class'] });
+    new ResizeObserver(place).observe(stage);
+    addEventListener('resize', place);
+    place();
+  }
 })();

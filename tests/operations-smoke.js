@@ -45,6 +45,12 @@ module.exports = async function(c) {
     assert.ok(!(await api(S3,'GET','/api/learning/reminders')).body.schedules.some(s=>s.id===near.id));
     await api(T,'DELETE','/api/learning/schedules/'+near.id);
   });
+  await test('mã lớp chỉ giáo viên phụ trách/admin thấy trong thông tin lớp',async()=>{
+    const t=(await api(T,'GET','/api/classes/'+ielts.id)).body.class;
+    assert.ok(/^[A-Z0-9]{4,10}$/.test(t.code||''),'giáo viên phải nhận mã lớp');
+    assert.equal((await api(A,'GET','/api/classes/'+ielts.id)).body.class.code,t.code);
+    const s=await api(S1,'GET','/api/classes/'+ielts.id);assert.equal(s.status,200);assert.ok(!('code' in s.body.class),'học sinh không được nhận mã lớp');
+  });
   await test('admin tạo/sửa/xóa lớp và đặt lịch lặp hằng tuần',async()=>{
     const teacherId=ielts.teacherId;
     assert.equal((await api(T,'POST','/api/admin/classes',{name:'No',teacherId})).status,403);

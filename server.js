@@ -204,7 +204,8 @@ app.get('/api/classes/:id', auth(), (req, res) => {
   const c = findClass(req.params.id);
   if (!canAccessLive(req.user, c)) return res.status(403).json({ error: 'Bạn không thuộc lớp học này.' });
   const teacher = findUser(c.teacherId);
-  res.json({ class: { id: c.id, name: c.name, level: c.level, color: c.color, teacher: teacher && teacher.name, studentCount: c.studentIds.length, live: liveInfo(c.id) } });
+  const manager = c.teacherId === req.user.id || req.user.role === 'admin';
+  res.json({ class: { id: c.id, name: c.name, level: c.level, color: c.color, teacher: teacher && teacher.name, studentCount: c.studentIds.length, live: liveInfo(c.id), ...(manager ? { code: c.code } : {}) } });
 });
 
 const COLORS = ['violet', 'orange', 'teal', 'pink', 'blue'];

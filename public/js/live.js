@@ -57,6 +57,7 @@ async function init() {
     const { class: c } = await api('/api/classes/' + classId);
     $('liveTitle').textContent = c.live ? c.live.title : c.name;
     $('liveSub').textContent = `${c.name} · ${c.teacher}`;
+    if (c.code) showClassCode(c.code); // chỉ giáo viên phụ trách/admin nhận được mã lớp
     if (!c.live) return showState('😴', 'Lớp học chưa bắt đầu', 'Giáo viên chưa mở livestream. Bạn sẽ thấy nút “Vào học” khi lớp lên sóng.', true);
   } catch (e) {
     return showState('🔒', 'Bạn không có quyền vào lớp này', e.message, true);
@@ -421,6 +422,9 @@ function closeStudentPeer() {
 function setupUi() {
   $('backBtn').onclick = () => leave();
   $('peopleLabel').textContent = isTeacher ? 'Học sinh' : 'Từ vựng';
+  // Tab này là danh sách học sinh (giáo viên) hoặc từ vựng (học sinh): đổi tooltip và icon cho đúng
+  const pb = $('tabPeople'); pb.dataset.tip = $('peopleLabel').textContent; pb.setAttribute('aria-label', pb.dataset.tip);
+  if (!isTeacher) { const ic = pb.querySelector('[data-lucide]'); if (ic) ic.outerHTML = '<i data-lucide="book-open-text"></i>'; icons(); }
   $('quick').innerHTML = (isTeacher ? QUICK_TEACHER : QUICK_STUDENT).map((q) => `<button type="button">${esc(q)}</button>`).join('');
   $('quick').querySelectorAll('button').forEach((b) => (b.onclick = () => socket.emit('chat', { text: b.textContent })));
   $('chatForm').onsubmit = (e) => {
@@ -447,6 +451,18 @@ function setupUi() {
   renderPeople();
 }
 
+// Mã lớp ở thanh trên: bấm để sao chép gửi cho học sinh xin vào lớp
+function showClassCode(code) {
+  const chip = $('codeChip');
+  $('codeText').textContent = code;
+  chip.hidden = false;
+  chip.onclick = async () => {
+    try { await navigator.clipboard.writeText(code); toast('Đã sao chép mã lớp ' + code, 'success'); }
+    catch { toast('Mã lớp: ' + code); }
+  };
+  icons();
+}
+
 function ctrl(id, icon, label, cls = '') {
   return `<button class="ctrl ${cls}" id="${id}" data-tip="${esc(label)}" aria-label="${esc(label)}"><i data-lucide="${icon}"></i><span class="lbl">${esc(label)}</span></button>`;
 }
@@ -462,6 +478,7 @@ function renderControls() {
       ctrl('cMic', micOn ? 'mic' : 'mic-off', micOn ? 'Micro' : 'Đã tắt mic', micOn ? '' : 'off') +
       ctrl('cCam', camOn ? 'video' : 'video-off', camOn ? 'Camera' : 'Đã tắt cam', camOn ? '' : 'off') +
       ctrl('cQuality', 'gauge', 'Chất lượng camera: ' + CAM_QUALITY[camQualityKey()].label) + SEP +
+      ctrl('cLesson', 'presentation', 'Thêm / đổi bài giảng', LessonLive.state ? 'on' : '') +
       ctrl('cScreen', screenTrack ? 'monitor-off' : 'monitor-up', screenTrack ? 'Dừng chia sẻ' : 'Chia sẻ màn hình', screenTrack ? 'on' : '') +
       ctrl('cListen', 'headphones', 'Phát file nghe', listenEl ? 'on' : '') +
       ctrl('cRec', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi hình', rec ? 'danger rec' : '') + SEP +
@@ -472,6 +489,7 @@ function renderControls() {
     $('cMic').onclick = () => toggleTrack('audio');
     $('cCam').onclick = () => toggleTrack('video');
     $('cQuality').onclick = qualityModal;
+    $('cLesson').onclick = () => LessonLive.openPicker();
     $('cScreen').onclick = toggleScreen;
     $('cWord').onclick = wordModal;
     $('cListen').onclick = listenModal;
