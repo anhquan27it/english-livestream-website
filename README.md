@@ -128,6 +128,20 @@ Nếu tạo Web Service thủ công, chọn repository này, runtime **Node**, b
 Tham khảo: [Render Node.js](https://render.com/docs/deploy-node-express-app),
 [giới hạn gói Free](https://render.com/docs/free).
 
+## LiveKit Cloud, chất lượng camera và quản trị
+
+- **Dùng LiveKit Cloud** (gói Build miễn phí: 5.000 phút WebRTC và 50 GB băng thông mỗi tháng, 100 người cùng lúc): tạo project tại livekit.io, tạo API key, rồi trong PowerShell (không dán khoá vào chat hay tệp trong git):
+
+  ```powershell
+  Read-Host "Copy khoi Environment variables tren LiveKit roi nhan Enter" | Out-Null; Get-Clipboard | ForEach-Object { if ($_ -match '^(LIVEKIT_\w+)=(.+)$') { Set-Item "env:$($Matches[1])" $Matches[2].Trim() } }
+  npm start
+  ```
+
+  Biến chỉ có hiệu lực trong cửa sổ PowerShell đó. Server in `Video: LiveKit (...)` khi đã nhận khoá; nếu in `WebRTC P2P` thì chưa có khoá.
+- **Chất lượng camera**: giáo viên bấm nút "Chất lượng" trong phòng live (Tiết kiệm / Cân bằng / Cao) để giảm băng thông.
+- **Quản trị** (`/admin.html`): thanh bên gồm Tổng quan (kèm số người online trên LiveKit), Tài khoản, Lớp học (tạo/sửa/xóa, phân công), Thời khóa biểu (lặp hằng tuần), Tài liệu & bản ghi, Hệ thống (hạn mức, sao lưu), Nhật ký, Cài đặt AI.
+- **Trước khi mở cho người lạ**: gỡ/đổi tài khoản mẫu (mật khẩu `123456`) và admin demo, và revoke mọi khoá LiveKit đã lộ.
+
 ## Kế hoạch tiếp theo
 
 - **Lớp đông (trên ~20 học sinh)**: đã có chế độ **LiveKit** cho video/âm thanh (quiz, slide, bảng viết, chat AI vẫn chạy qua Socket.IO; không cấu hình LiveKit thì dùng P2P cũ). Thử trên máy mình: `npm run livekit:dev` rồi `npm run start:lk` (hoặc đặt `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`). Để người ở máy khác vào, LiveKit phải truy cập được từ internet (LiveKit Cloud hoặc máy chủ riêng). Chi tiết: [PROJECT.md](PROJECT.md) mục *Chế độ LiveKit*.
