@@ -325,6 +325,28 @@ async function main() {
     assert.ok(!(await lkVerify((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).body.token)).canPublish, 'thu mic thì token mới không còn quyền phát');
     assert.ok((await emit(ss, 'speak:revoke')).error, 'học sinh không thu mic của người khác');
   });
+  await test('giáo viên cấp thêm camera/chia sẻ màn hình cho người đang phát biểu; đổi người thì quyền về tắt', async () => {
+    const tok = async () => lkVerify((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).body.token);
+    assert.ok((await emit(ts, 'speak:perms', { camera: true })).error, 'chưa có ai phát biểu');
+    await emit(ts, 'speak:grant', { socketId: ss.id });
+    assert.ok((await emit(ss, 'speak:perms', { camera: true, screen: true })).error, 'học sinh không tự cấp quyền');
+    assert.deepEqual((await tok()).canPublishSources, ['microphone']);
+    const got = nextEvent(ss, 'speak:perms'), info = nextEvent(s2, 'speaker', (x) => x && x.perms && x.perms.camera);
+    const r = await emit(ts, 'speak:perms', { camera: true });
+    assert.ok(r.ok); assert.deepEqual(r.perms, { camera: true, screen: false });
+    assert.deepEqual((await got).perms, { camera: true, screen: false });
+    assert.equal((await info).socketId, ss.id, 'cả lớp biết ai đang được cấp camera');
+    assert.deepEqual((await tok()).canPublishSources.sort(), ['camera', 'microphone']);
+    assert.ok((await emit(ts, 'speak:perms', { screen: true })).ok);
+    assert.deepEqual((await tok()).canPublishSources.sort(), ['camera', 'microphone', 'screen_share', 'screen_share_audio']);
+    assert.ok((await emit(ts, 'speak:perms', { camera: false, screen: false })).ok);
+    assert.deepEqual((await tok()).canPublishSources, ['microphone']);
+    await emit(ts, 'speak:perms', { camera: true });
+    await emit(ts, 'speak:grant', { socketId: s2.id }); // đổi người nói
+    await emit(ts, 'speak:grant', { socketId: ss.id }); // quay lại người cũ: quyền thêm đã bị đặt lại
+    assert.deepEqual((await tok()).canPublishSources, ['microphone']);
+    assert.ok((await emit(ts, 'speak:revoke')).ok);
+  });
   await test('học sinh đang phát biểu rời phòng thì mic được thu lại', async () => {
     await emit(ts, 'speak:grant', { socketId: s2.id });
     const none = nextEvent(ss, 'speaker', (x) => x === null);

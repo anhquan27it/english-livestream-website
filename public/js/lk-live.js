@@ -9,6 +9,7 @@ const LiveKitLive = (() => {
   let room = null;
   let micPub = null, camPub = null, screenPub = null, screenAudioPub = null, filePub = null;
   const videos = {};               // 'screen' | 'camera' -> RemoteTrack đang nhận từ giáo viên
+  const spk = {};                  // 'screen' | 'camera' -> { track, identity, name } của học sinh được cấp quyền (camera/chia sẻ màn hình)
   const audioEls = new Map();      // trackSid -> <audio>
   const audioByUser = new Map();   // identity -> MediaStreamTrack (để giáo viên trộn khi ghi hình)
   let muted = false;
@@ -67,6 +68,7 @@ const LiveKitLive = (() => {
         await new Promise((res) => setTimeout(res, 1000 * (i + 1)));
         if (closing) break;
         Object.keys(videos).forEach((k) => delete videos[k]);
+        Object.keys(spk).forEach((k) => delete spk[k]);
         renderVideo();
         audioEls.forEach((el) => el.remove()); audioEls.clear();
         await connect();
@@ -84,7 +86,11 @@ const LiveKitLive = (() => {
   function wireMain(r) {
     const E = lib().RoomEvent;
     r.on(E.TrackSubscribed, (track, pub, p) => {
-      if (track.kind === 'video') {
+      if (track.kind === 'video' && !isTeacherP(p)) {
+        // Hình của học sinh đang phát biểu: không lẫn với hình giáo viên
+        spk[pub.source === Source().ScreenShare ? 'screen' : 'camera'] = { track, identity: p.identity, name: p.name || p.identity };
+        renderVideo();
+      } else if (track.kind === 'video') {
         videos[pub.source === Source().ScreenShare ? 'screen' : 'camera'] = track;
         renderVideo();
         if (o.onFirstVideo) o.onFirstVideo();
@@ -93,13 +99,16 @@ const LiveKitLive = (() => {
         el.muted = muted;
         holder().appendChild(el);
         audioEls.set(track.sid, el);
-        audioByUser.set(p.identity, track.mediaStreamTrack);
-        if (o.onAudio) o.onAudio(p.identity, track.mediaStreamTrack);
+        if (pub.source === Source().Microphone) { // âm thanh màn hình của học sinh vẫn phát, nhưng không dùng làm "giọng" để trộn
+          audioByUser.set(p.identity, track.mediaStreamTrack);
+          if (o.onAudio) o.onAudio(p.identity, track.mediaStreamTrack);
+        }
       }
     });
     r.on(E.TrackUnsubscribed, (track, pub, p) => {
       if (track.kind === 'video') {
         const key = pub.source === Source().ScreenShare ? 'screen' : 'camera';
+        if (spk[key] && spk[key].track === track) delete spk[key];
         if (videos[key] === track) delete videos[key];
         track.detach();
         renderVideo();
@@ -117,6 +126,8 @@ const LiveKitLive = (() => {
     r.on(E.ParticipantDisconnected, (p) => {
       if (o.onPresence) o.onPresence(p.identity, false);
       if (!o.isTeacher && isTeacherP(p) && o.onTeacherGone) o.onTeacherGone();
+      ['camera', 'screen'].forEach((k) => { if (spk[k] && spk[k].identity === p.identity) delete spk[k]; });
+      renderVideo();
     });
     r.on(E.AudioPlaybackStatusChanged, () => { if (!r.canPlaybackAudio) needGesture(); });
     r.on(E.Reconnecting, () => { if (o.onNetwork) o.onNetwork('reconnecting'); });
@@ -133,16 +144,36 @@ const LiveKitLive = (() => {
 
   // Ưu tiên màn hình giáo viên chia sẻ, nếu không có thì camera
   function renderVideo() {
-    const want = videos.screen || videos.camera || null;
-    if (want === current) return;
-    if (current) current.detach(o.video);
-    current = want;
-    if (want) {
-      want.attach(o.video);
-      o.video.muted = true; // âm thanh do các phần tử <audio> riêng phát; phần tử video chỉ hiển thị hình
-      o.video.play().catch(() => {});
+    const want = (spk.screen && spk.screen.track) || (o.isTeacher ? null : (videos.screen || videos.camera || null));
+    if (want !== current) {
+      if (current) current.detach(o.video);
+      current = want;
+      if (want) {
+        want.attach(o.video);
+        o.video.muted = true; // âm thanh do các phần tử <audio> riêng phát; phần tử video chỉ hiển thị hình
+        o.video.style.transform = 'none';
+        o.video.play().catch(() => {});
+      } else if (o.isTeacher) {
+        if (o.onLocalPreview) o.onLocalPreview(); // hết màn hình của học sinh: trả lại hình xem trước của giáo viên
+      } else {
+        o.video.srcObject = null;
+      }
+      if (o.onSpeakerScreen) o.onSpeakerScreen(!!(spk.screen && want === spk.screen.track), spk.screen && spk.screen.name);
+    }
+    renderSpeakerCam();
+  }
+
+  // Khung nhỏ camera của học sinh đang phát biểu (góc trên trái sân khấu)
+  function renderSpeakerCam() {
+    const tile = document.getElementById('spkTile'), el = document.getElementById('spkCam');
+    if (!tile || !el) return;
+    const c = spk.camera;
+    if (c) {
+      if (el.dataset.sid !== c.track.sid) { try { c.track.attach(el); } catch { /* đã gắn */ } el.dataset.sid = c.track.sid; el.muted = true; el.play().catch(() => {}); }
+      document.getElementById('spkName').textContent = c.name;
+      tile.hidden = false;
     } else {
-      o.video.srcObject = null;
+      tile.hidden = true; el.srcObject = null; delete el.dataset.sid;
     }
   }
 
@@ -231,6 +262,30 @@ const LiveKitLive = (() => {
     if (speakerPub && speakerPub.track) { try { await room.localParticipant.unpublishTrack(speakerPub.track, false); } catch {} }
     speakerPub = null;
   }
+  const studentPubs = {};
+  // Quyền camera/màn hình có thể đến muộn hơn tin nhắn socket vài trăm ms: thử lại vài lần
+  async function publishWithRetry(fn) {
+    let err;
+    for (let i = 0; i < 4; i++) { try { return await fn(); } catch (e) { err = e; await new Promise((r) => setTimeout(r, 400)); } }
+    throw err;
+  }
+  async function startStudentCamera(track) {
+    if (!(await waitCanPublish())) throw new Error('Chưa được cấp quyền phát.');
+    studentPubs.camera = await publishWithRetry(() => room.localParticipant.publishTrack(track, { source: Source().Camera, name: 'student-camera', simulcast: false, videoEncoding: { maxBitrate: 500000, maxFramerate: 20 } }));
+  }
+  async function startStudentScreen(videoTrack, audioTrack) {
+    if (!(await waitCanPublish())) throw new Error('Chưa được cấp quyền phát.');
+    studentPubs.screen = await publishWithRetry(() => room.localParticipant.publishTrack(videoTrack, { source: Source().ScreenShare, name: 'student-screen', simulcast: false, videoEncoding: { maxBitrate: 1500000, maxFramerate: 15 } }));
+    if (audioTrack) { try { studentPubs.screenAudio = await room.localParticipant.publishTrack(audioTrack, { source: Source().ScreenShareAudio, name: 'student-screen-audio' }); } catch { /* chưa có quyền âm thanh màn hình */ } }
+  }
+  async function stopStudent(kind) {
+    const lp = room && room.localParticipant;
+    for (const k of kind === 'screen' ? ['screen', 'screenAudio'] : [kind]) {
+      const pub = studentPubs[k];
+      if (pub && pub.track && lp) { try { await lp.unpublishTrack(pub.track, false); } catch { /* đã bị thu */ } }
+      delete studentPubs[k];
+    }
+  }
   const setSpeakerMuted = async (m) => { if (speakerPub && speakerPub.track) { if (m) await speakerPub.mute(); else await speakerPub.unmute(); } };
 
   // ----- Phòng nhóm -----
@@ -271,7 +326,7 @@ const LiveKitLive = (() => {
   }
 
   return {
-    isEnabled, connect, disconnect, setMuted, hasVideo, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
+    isEnabled, connect, disconnect, setMuted, hasVideo, startStudentCamera, startStudentScreen, stopStudent, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
     startSpeaking, stopSpeaking, setSpeakerMuted, joinGroup,
     audioTrackOf: (identity) => audioByUser.get(identity) || null,
     get room() { return room; },

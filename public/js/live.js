@@ -39,6 +39,8 @@ const words = [];
 let remoteStream = null;       // gom mọi track nhận từ giáo viên vào một luồng
 let audioSender = null;        // sender âm thanh về phía giáo viên (chỉ phát khi được cho phép)
 let micStream = null, speaking = false, mutedSelf = false;
+let spkPerms = { camera: false, screen: false }, myCamStream = null, myScreenStream = null; // học sinh được giáo viên cấp thêm camera/chia sẻ màn hình (cần LiveKit)
+let autoSwapped = false;
 let speaker = null;            // người đang phát biểu (cả lớp thấy)
 
 const QUICK_STUDENT = ['Could you repeat that, please? 🙏', 'I understand! 👍', 'Can you speak more slowly?', 'How do you spell it?'];
@@ -117,7 +119,16 @@ async function init() {
     });
     socket.on('teacher:joined', () => { if (LK) return; showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'); });
     socket.on('hand:lowered', () => { handRaised = false; renderControls(); toast('Giáo viên đã hạ tay của bạn'); });
-    socket.on('speak:granted', startMic);
+    socket.on('speak:granted', (d) => { spkPerms = (d && d.perms) || { camera: false, screen: false }; startMic(); });
+    socket.on('speak:perms', ({ perms } = {}) => {
+      const before = spkPerms;
+      spkPerms = perms || { camera: false, screen: false };
+      if (!spkPerms.camera) stopMyCam();
+      if (!spkPerms.screen) stopMyScreen();
+      if (spkPerms.camera && !before.camera) toast('📹 Giáo viên cho phép bạn bật camera', 'success');
+      if (spkPerms.screen && !before.screen) toast('🖥 Giáo viên cho phép bạn chia sẻ màn hình', 'success');
+      renderControls();
+    });
     socket.on('speak:revoked', ({ reason }) => stopMic(reason));
     socket.on('star:received', ({ count }) => { toast(`⭐ Bạn được tặng ${count} sao!`, 'success'); showReaction({ emoji: '⭐', name: me.name }); });
   }
@@ -501,6 +512,8 @@ function renderControls() {
     box.innerHTML =
       ctrl('cHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay', handRaised ? 'on' : '') +
       (speaking ? ctrl('cMyMic', mutedSelf ? 'mic-off' : 'mic', mutedSelf ? 'Mic đang tắt' : 'Bạn đang nói', mutedSelf ? 'off' : 'on') : '') +
+      (speaking && LK && spkPerms.camera ? ctrl('cMyCam', myCamStream ? 'video' : 'video-off', myCamStream ? 'Tắt camera của bạn' : 'Bật camera của bạn', myCamStream ? 'on' : 'off') : '') +
+      (speaking && LK && spkPerms.screen ? ctrl('cMyScreen', myScreenStream ? 'monitor-off' : 'monitor-up', myScreenStream ? 'Dừng chia sẻ màn hình' : 'Chia sẻ màn hình của bạn', myScreenStream ? 'on' : '') : '') +
       ctrl('cReact', 'smile', 'Cảm xúc') + SEP +
       ctrl('cCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '') +
       ctrl('cSound', isSoundMuted() ? 'volume-x' : 'volume-2', isSoundMuted() ? 'Bật tiếng' : 'Âm thanh', isSoundMuted() ? 'off' : '') +
@@ -508,6 +521,8 @@ function renderControls() {
       ctrl('cLeave', 'log-out', 'Rời lớp', 'danger');
     $('cHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); };
     if ($('cMyMic')) $('cMyMic').onclick = () => { mutedSelf = !mutedSelf; if (micStream) micStream.getAudioTracks().forEach((t) => (t.enabled = !mutedSelf)); renderControls(); };
+    if ($('cMyCam')) $('cMyCam').onclick = toggleMyCam;
+    if ($('cMyScreen')) $('cMyScreen').onclick = toggleMyScreen;
     $('cReact').onclick = reactPicker;
     $('cCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); };
     $('cSound').onclick = () => { setSoundMuted(!isSoundMuted()); if (!isSoundMuted()) $('unmuteBtn')?.remove(); renderControls(); };
@@ -538,6 +553,7 @@ function renderPeople() {
       ${v.hand ? `<span class="hand">✋</span><button class="icon-btn" data-lower="${id}" title="Hạ tay"><i data-lucide="hand"></i></button>` : ''}
       <button class="icon-btn" data-star="${id}" title="Tặng sao (+10 điểm)"><i data-lucide="star"></i></button>
       <button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? 'Thu lại mic' : 'Cho phép phát biểu'}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>
+      ${LK && speakerSocket === id ? `<button class="icon-btn ${speaker && speaker.perms && speaker.perms.camera ? 'speaking' : ''}" data-perm="camera" title="${speaker && speaker.perms && speaker.perms.camera ? 'Thu quyền camera' : 'Cho phép bật camera'}"><i data-lucide="video"></i></button><button class="icon-btn ${speaker && speaker.perms && speaker.perms.screen ? 'speaking' : ''}" data-perm="screen" title="${speaker && speaker.perms && speaker.perms.screen ? 'Thu quyền chia sẻ màn hình' : 'Cho phép chia sẻ màn hình'}"><i data-lucide="monitor-up"></i></button>` : ''}
       <button class="icon-btn" data-kick="${id}" title="Mời rời buổi học"><i data-lucide="user-x"></i></button>
     </div>`).join('')
     : '<div class="empty" style="color:#8885ab"><div class="emoji">👀</div>Chưa có học sinh nào vào xem.<br />Học sinh trong lớp sẽ nhận được thông báo.</div>';
@@ -547,6 +563,10 @@ function renderPeople() {
     if (speakerSocket === id) return socket.emit('speak:revoke');
     ensureMixer(); // cần thao tác người dùng để bật bộ trộn âm thanh
     socket.emit('speak:grant', { socketId: id }, (r) => r && r.error && toast(r.error, 'error'));
+  }));
+  panel.querySelectorAll('[data-perm]').forEach((b) => (b.onclick = () => {
+    const k = b.dataset.perm;
+    socket.emit('speak:perms', { [k]: !(speaker && speaker.perms && speaker.perms[k]) }, (r) => r && r.error && toast(r.error, 'error'));
   }));
   panel.querySelectorAll('[data-lower]').forEach((b) => (b.onclick = () => socket.emit('hand:lower', { socketId: b.dataset.lower })));
   panel.querySelectorAll('[data-kick]').forEach((b) => (b.onclick = async () => {
@@ -732,8 +752,55 @@ async function startMic() {
   renderControls();
 }
 
+// ----- Học sinh: camera và chia sẻ màn hình khi được cấp quyền (LiveKit) -----
+async function toggleMyCam() {
+  if (myCamStream) return stopMyCam();
+  try {
+    let track;
+    if (FAKE_MIC) track = canvasTrack();
+    else track = (await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 20 }, ...devicePreferences('camera') } })).getVideoTracks()[0];
+    myCamStream = new MediaStream([track]);
+    await LiveKitLive.startStudentCamera(track);
+    toast('📹 Camera của bạn đang hiển thị cho cả lớp', 'success');
+  } catch (e) {
+    stopMyCam();
+    toast('Không bật được camera: ' + (e && e.message ? e.message : 'hãy cho phép trình duyệt dùng camera.'), 'error');
+  }
+  renderControls();
+}
+function stopMyCam() {
+  if (!myCamStream) return;
+  const s = myCamStream; myCamStream = null;
+  if (LK) LiveKitLive.stopStudent('camera');
+  s.getTracks().forEach((t) => t.stop());
+  renderControls();
+}
+async function toggleMyScreen() {
+  if (myScreenStream) return stopMyScreen();
+  try {
+    myScreenStream = FAKE_MIC ? new MediaStream([canvasTrack()]) : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: true });
+    const v = myScreenStream.getVideoTracks()[0];
+    v.onended = () => stopMyScreen();
+    await LiveKitLive.startStudentScreen(v, myScreenStream.getAudioTracks()[0] || null);
+    toast('🖥 Bạn đang chia sẻ màn hình cho cả lớp', 'success');
+  } catch (e) {
+    stopMyScreen();
+    if (!e || e.name !== 'NotAllowedError') toast('Không chia sẻ được màn hình: ' + (e && e.message ? e.message : ''), 'error');
+  }
+  renderControls();
+}
+function stopMyScreen() {
+  if (!myScreenStream) return;
+  const s = myScreenStream; myScreenStream = null;
+  if (LK) LiveKitLive.stopStudent('screen');
+  s.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+  renderControls();
+}
+
 function stopMic(reason) {
   if (!speaking && !micStream) return;
+  stopMyCam(); stopMyScreen();
+  spkPerms = { camera: false, screen: false };
   speaking = false;
   mutedSelf = false;
   if (LK) LiveKitLive.stopSpeaking();
@@ -1043,6 +1110,16 @@ function lkHandlers() {
       if (sv && sv.userId === identity && Mixer.active) Mixer.attachSpeaker(track, false);
     },
     onFirstVideo: () => hideState(),
+    // Hết màn hình học sinh chia sẻ: giáo viên quay lại xem hình của chính mình
+    onLocalPreview: () => { if (isTeacher && camStream) showLocalPreview(); },
+    // Học sinh chia sẻ màn hình: ghi chú tên + tự đổi khung nếu đang chiếu slide để màn hình đó hiện lớn
+    onSpeakerScreen: (on, name) => {
+      const note = $('spkNote'), st = $('stage');
+      note.hidden = !on;
+      if (on) note.textContent = '🖥 ' + name + ' đang chia sẻ màn hình';
+      if (on && st.classList.contains('with-slide') && !st.classList.contains('swap')) { st.classList.add('swap'); autoSwapped = true; }
+      else if (!on && autoSwapped) { st.classList.remove('swap'); autoSwapped = false; }
+    },
     // Giáo viên vào lại phòng LiveKit sau khi mất kết nối: phát lại camera/micro (và màn hình đang chia sẻ)
     onRejoined: async () => {
       if (!isTeacher || !camStream) return;

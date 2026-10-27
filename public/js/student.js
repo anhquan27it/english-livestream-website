@@ -22,7 +22,6 @@ if (me) {
   const socket = connectSocket();
   socket.on('classes:changed', () => load(true));
   document.getElementById('joinBtn').onclick = joinClass;
-  document.getElementById('joinNav').onclick = (e) => { e.preventDefault(); joinClass(); };
 }
 
 async function load(notify = false) {

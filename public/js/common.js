@@ -206,8 +206,7 @@ function buildSidebar(role, active) {
     : '<div class="promo" style="background:linear-gradient(150deg,#ff8a3d,#f43f6e)"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
   document.getElementById('sidebar').innerHTML = `
     <a href="/" class="brand"><span class="brand-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
-    <nav class="side-nav">${nav.map(([id, href, ic, label]) => `<a href="${href}" class="${id === active ? 'active' : ''}"><i data-lucide="${ic}"></i> ${label}</a>`).join('')}
-      ${role === 'student' && active === 'home' ? '<a href="#" id="joinNav"><i data-lucide="key-round"></i> Nhập mã lớp</a>' : ''}</nav>
+    <nav class="side-nav">${nav.map(([id, href, ic, label]) => `<a href="${href}" class="${id === active ? 'active' : ''}"><i data-lucide="${ic}"></i> ${label}</a>`).join('')}</nav>
     <div class="side-foot">${promo}
       <div class="me"><span data-me-avatar></span><div class="info"><b data-me-name></b><small>${({admin:'Quản trị viên',teacher:'Giáo viên',assistant:'Trợ giảng',student:'Học sinh'})[Auth.user?.role] || 'Người dùng'}</small></div>
       <button class="icon-btn" data-logout title="Đăng xuất"><i data-lucide="log-out"></i></button></div></div>`;

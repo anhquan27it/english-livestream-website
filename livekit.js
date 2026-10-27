@@ -33,12 +33,14 @@ function create() {
     return at.toJwt();
   }
 
-  // Cho/thu quyền phát (chỉ micro) của một học sinh đang ở phòng chính. Lỗi (học sinh chưa vào LiveKit...) không làm hỏng buổi học.
-  async function allowSpeaker(classId, userId, allowed) {
+  const speakerSources = (perms = {}) => [TrackSource.MICROPHONE, ...(perms.camera ? [TrackSource.CAMERA] : []), ...(perms.screen ? [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO] : [])];
+
+  // Cho/thu quyền phát (micro, và camera/màn hình nếu giáo viên cấp thêm) của một học sinh đang ở phòng chính. Lỗi (học sinh chưa vào LiveKit...) không làm hỏng buổi học.
+  async function allowSpeaker(classId, userId, allowed, perms = {}) {
     if (!svc || !userId) return false;
     try {
       await svc.updateParticipant(roomName(classId), userId, undefined, {
-        canSubscribe: true, canPublish: allowed, canPublishData: false, canPublishSources: allowed ? [TrackSource.MICROPHONE] : [],
+        canSubscribe: true, canPublish: allowed, canPublishData: false, canPublishSources: allowed ? speakerSources(perms) : [],
       });
       return true;
     } catch (e) {
@@ -74,7 +76,7 @@ function create() {
     }
   }
 
-  return { enabled: cfg.enabled, config: cfg, roomName, makeToken, allowSpeaker, endRooms, removeUser, stats, TrackSource };
+  return { enabled: cfg.enabled, config: cfg, roomName, makeToken, allowSpeaker, speakerSources, endRooms, removeUser, stats, TrackSource };
 }
 
 // Route: /api/config cho trình duyệt biết có dùng LiveKit không; /api/livekit/token cấp token theo quyền của người dùng
@@ -100,7 +102,7 @@ function createRouter({ lk, auth, lives, findClass, canAccess, viewerUserId, gro
       if (!groupId) {
         // Phòng chính: chỉ giáo viên phát; học sinh chỉ nghe/xem, trừ khi đang được cho phát biểu (khi đó chỉ được phát micro)
         const speaking = live.speaker && viewerUserId(live, live.speaker) === req.user.id;
-        params = { canPublish: isTeacher || !!speaking, sources: isTeacher ? undefined : [lk.TrackSource.MICROPHONE] };
+        params = { canPublish: isTeacher || !!speaking, sources: isTeacher ? undefined : lk.speakerSources(live.speakerPerms) };
       } else {
         // Phòng nhóm: thành viên của nhóm (hoặc giáo viên) mới được vào; trong nhóm ai cũng phát camera + micro
         const g = live.breakout && live.breakout.groups.find((x) => x.id === groupId);
