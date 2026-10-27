@@ -21,6 +21,7 @@ const viewers = new Map(); // socketId -> { name, hand }
 const outStream = new MediaStream();
 const remoteAudio = new Map(); // socketId học sinh -> track âm thanh nhận được (trộn khi cho phép phát biểu)
 let speakerSocket = null;      // socket của học sinh đang được phát biểu
+addEventListener('beforeunload', (e) => { if (rec) { e.preventDefault(); e.returnValue = ''; } }); // đóng tab khi đang ghi sẽ mất bản ghi
 let rec = null;                // bản ghi đang chạy { mr, chunks, canvas, timer, startedAt }
 let listenEl = null;           // phần tử phát file nghe
 let screenStream = null;       // luồng chia sẻ màn hình (có thể kèm âm thanh hệ thống)
@@ -447,8 +448,9 @@ function setupUi() {
 }
 
 function ctrl(id, icon, label, cls = '') {
-  return `<button class="ctrl ${cls}" id="${id}" title="${esc(label)}"><i data-lucide="${icon}"></i><span class="lbl">${esc(label)}</span></button>`;
+  return `<button class="ctrl ${cls}" id="${id}" data-tip="${esc(label)}" aria-label="${esc(label)}"><i data-lucide="${icon}"></i><span class="lbl">${esc(label)}</span></button>`;
 }
+const SEP = '<span class="ctrl-sep" aria-hidden="true"></span>';
 
 function renderControls() {
   const box = $('controls');
@@ -459,14 +461,14 @@ function renderControls() {
     box.innerHTML =
       ctrl('cMic', micOn ? 'mic' : 'mic-off', micOn ? 'Micro' : 'Đã tắt mic', micOn ? '' : 'off') +
       ctrl('cCam', camOn ? 'video' : 'video-off', camOn ? 'Camera' : 'Đã tắt cam', camOn ? '' : 'off') +
-      ctrl('cQuality', 'gauge', 'Chất lượng: ' + CAM_QUALITY[camQualityKey()].label) +
+      ctrl('cQuality', 'gauge', 'Chất lượng camera: ' + CAM_QUALITY[camQualityKey()].label) + SEP +
       ctrl('cScreen', screenTrack ? 'monitor-off' : 'monitor-up', screenTrack ? 'Dừng chia sẻ' : 'Chia sẻ màn hình', screenTrack ? 'on' : '') +
       ctrl('cListen', 'headphones', 'Phát file nghe', listenEl ? 'on' : '') +
-      ctrl('cRec', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi hình', rec ? 'danger' : '') +
+      ctrl('cRec', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi hình', rec ? 'danger rec' : '') + SEP +
       ctrl('cMuteAll', 'mic-off', 'Tắt mic lớp', speakerSocket ? 'on' : '') +
       ctrl('cCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') +
-      ctrl('cWord', 'book-open-text', 'Thẻ từ vựng') +
-      ctrl('cEnd', 'square', 'Kết thúc', 'danger');
+      ctrl('cWord', 'book-open-text', 'Thẻ từ vựng') + SEP +
+      ctrl('cEnd', 'square', 'Kết thúc buổi học', 'danger');
     $('cMic').onclick = () => toggleTrack('audio');
     $('cCam').onclick = () => toggleTrack('video');
     $('cQuality').onclick = qualityModal;
@@ -481,10 +483,10 @@ function renderControls() {
     box.innerHTML =
       ctrl('cHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay', handRaised ? 'on' : '') +
       (speaking ? ctrl('cMyMic', mutedSelf ? 'mic-off' : 'mic', mutedSelf ? 'Mic đang tắt' : 'Bạn đang nói', mutedSelf ? 'off' : 'on') : '') +
-      ctrl('cReact', 'smile', 'Cảm xúc') +
+      ctrl('cReact', 'smile', 'Cảm xúc') + SEP +
       ctrl('cCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '') +
       ctrl('cSound', isSoundMuted() ? 'volume-x' : 'volume-2', isSoundMuted() ? 'Bật tiếng' : 'Âm thanh', isSoundMuted() ? 'off' : '') +
-      ctrl('cFull', 'maximize', 'Toàn màn hình') +
+      ctrl('cFull', 'maximize', 'Toàn màn hình') + SEP +
       ctrl('cLeave', 'log-out', 'Rời lớp', 'danger');
     $('cHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); };
     if ($('cMyMic')) $('cMyMic').onclick = () => { mutedSelf = !mutedSelf; if (micStream) micStream.getAudioTracks().forEach((t) => (t.enabled = !mutedSelf)); renderControls(); };
@@ -605,6 +607,7 @@ async function endLive() {
 }
 
 function leave() {
+  if (rec) return toast('Đang ghi hình: hãy dừng ghi và lưu bản ghi trước khi rời phòng.', 'error');
   if (socket) socket.emit('room:leave');
   location.href = Auth.home(me);
 }
@@ -830,6 +833,40 @@ function stopRecord() {
   renderControls();
 }
 
+// Tải bản ghi lên theo từng phần nhỏ (mỗi yêu cầu vài chục MB) để không vướng giới hạn kích thước của tunnel/proxy; mỗi phần thử lại 3 lần
+async function uploadRecording(blob, title, seconds, onProgress) {
+  const auth = { Authorization: 'Bearer ' + Auth.token };
+  const json = async (res) => { let d = null; try { d = await res.json(); } catch { /* không phải JSON */ } return d || {}; };
+  const explain = (res, d) => d.error || (res.status === 404
+    ? 'Máy chủ chưa có chức năng lưu bản ghi bản mới (đang chạy bản cũ). Hãy khởi động lại server (npm start) rồi bấm Tải về để không mất bản ghi.'
+    : res.status === 413 ? 'Bản ghi bị từ chối vì quá lớn hoặc hết dung lượng. Hãy bấm Tải về.'
+    : 'Tải lên thất bại (mã ' + res.status + '). Hãy bấm Tải về để giữ bản ghi.');
+  const start = await fetch(`/api/classes/${classId}/recordings/start`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ total: blob.size }) });
+  const sd = await json(start);
+  if (!start.ok) throw new Error(explain(start, sd));
+  const part = sd.partSize || 8 * 1024 * 1024;
+  let offset = 0;
+  while (offset < blob.size) {
+    const end = Math.min(offset + part, blob.size);
+    let ok = false, lastErr = 'Tải lên thất bại.';
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        const res = await fetch(`/api/recordings/uploads/${sd.uploadId}`, { method: 'PUT', headers: { ...auth, 'X-Offset': String(offset), 'Content-Type': 'application/octet-stream' }, body: blob.slice(offset, end) });
+        const d = await json(res);
+        if (res.ok) { offset = d.size; ok = true; }
+        else if (res.status === 409 && Number.isFinite(d.size)) { offset = d.size; ok = offset >= end; if (!ok) continue; } // máy chủ đã có tới vị trí này: tiếp tục từ đó
+        else { lastErr = explain(res, d); if (res.status >= 400 && res.status < 500 && res.status !== 408) break; }
+      } catch { lastErr = 'Mất kết nối khi tải lên.'; }
+      if (!ok) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+    if (!ok) { fetch(`/api/recordings/uploads/${sd.uploadId}`, { method: 'DELETE', headers: auth }).catch(() => {}); throw new Error(lastErr + ' Hãy bấm Tải về để giữ bản ghi.'); }
+    if (onProgress) onProgress(Math.min(99, Math.round(offset * 100 / blob.size)));
+  }
+  const fin = await fetch(`/api/recordings/uploads/${sd.uploadId}/finish`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ title, durationSec: seconds }) });
+  const fd = await json(fin);
+  if (!fin.ok) throw new Error(explain(fin, fd));
+}
+
 function saveRecordingModal(blob, seconds) {
   const mb = (blob.size / 1048576).toFixed(1);
   const url = URL.createObjectURL(blob);
@@ -847,19 +884,7 @@ function saveRecordingModal(blob, seconds) {
     const btn = e.currentTarget;
     btn.disabled = true; btn.textContent = 'Đang tải lên…';
     try {
-      const res = await fetch(`/api/classes/${classId}/recordings`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + Auth.token, 'X-Title': encodeURIComponent(m.querySelector('#recTitle').value), 'X-Duration': String(seconds) },
-        body: blob,
-      });
-      let d = null;
-      try { d = await res.json(); } catch { /* không phải JSON */ }
-      if (!res.ok) {
-        throw new Error((d && d.error) || (res.status === 404
-          ? 'Máy chủ chưa có chức năng lưu bản ghi (đang chạy bản cũ). Hãy khởi động lại server (npm start) rồi bấm Tải về để không mất bản ghi.'
-          : res.status === 413 ? 'Bản ghi quá lớn để tải lên (giới hạn 500 MB, và 100 MB nếu đang dùng đường dẫn cloudflared). Hãy bấm Tải về.'
-          : 'Tải lên thất bại (mã ' + res.status + '). Hãy bấm Tải về để giữ bản ghi.'));
-      }
+      await uploadRecording(blob, m.querySelector('#recTitle').value, seconds, (pct) => { btn.textContent = 'Đang tải lên ' + pct + '%'; });
       toast('Đã lưu bản ghi cho lớp', 'success');
       m.close();
     } catch (err) {

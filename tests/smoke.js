@@ -576,6 +576,30 @@ async function main() {
     assert.equal((await api(S1, 'GET', `/api/classes/${ielts.id}/recordings`)).body.recordings.length, 0);
   });
 
+  await test('bản ghi tải lên theo từng phần, tiếp tục đúng vị trí, tải về được', async () => {
+    const A1 = Buffer.alloc(30000, 1), A2 = Buffer.alloc(30000, 2), total = A1.length + A2.length;
+    const jpost = (p, tok, body) => fetch(BASE + p, { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const put = (uid, tok, off, buf) => fetch(BASE + '/api/recordings/uploads/' + uid, { method: 'PUT', headers: { Authorization: 'Bearer ' + tok, 'X-Offset': String(off), 'Content-Type': 'application/octet-stream' }, body: buf });
+    assert.equal((await jpost(`/api/classes/${ielts.id}/recordings/start`, S1, { total })).status, 403);
+    assert.equal((await jpost(`/api/classes/${ielts.id}/recordings/start`, T, { total: 5 })).status, 400);
+    const st = await jpost(`/api/classes/${ielts.id}/recordings/start`, T, { total });
+    assert.equal(st.status, 200);
+    const { uploadId } = await st.json();
+    assert.equal((await put(uploadId, S1, 0, A1)).status, 403);
+    const p1 = await put(uploadId, T, 0, A1); assert.equal(p1.status, 200); assert.equal((await p1.json()).size, 30000);
+    const bad = await put(uploadId, T, 0, A1); assert.equal(bad.status, 409); assert.equal((await bad.json()).size, 30000);
+    const early = await jpost(`/api/recordings/uploads/${uploadId}/finish`, T, { title: 'x', durationSec: 1 }); assert.equal(early.status, 409);
+    assert.equal((await put(uploadId, T, 30000, A2)).status, 200);
+    const fin = await jpost(`/api/recordings/uploads/${uploadId}/finish`, T, { title: 'Phần: A/B', durationSec: 7 });
+    assert.equal(fin.status, 200);
+    const rec = (await fin.json()).recording; assert.equal(rec.size, total); assert.equal(rec.title, 'Phần: A/B');
+    const file = await fetch(BASE + `/api/recordings/${rec.id}/file?token=${S1}`); assert.equal((await file.arrayBuffer()).byteLength, total);
+    const dl = await fetch(BASE + `/api/recordings/${rec.id}/file?download=1&token=${S1}`);
+    assert.match(dl.headers.get('content-disposition') || '', /attachment/);
+    assert.equal((await put(uploadId, T, 0, A1)).status, 404); // phiên đã đóng
+    assert.equal((await api(T, 'DELETE', `/api/recordings/${rec.id}`)).status, 200);
+  });
+
   console.log('Hỏi đáp sau buổi học');
   await test('danh sách bài đã gắn lớp + chat theo bài, có đáp án vì đã dạy; lưu & xoá lịch sử', async () => {
     const l = (await api(S1, 'GET', `/api/classes/${ielts.id}/lessons`)).body;
