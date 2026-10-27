@@ -91,42 +91,28 @@ Quy trình mượn ý tưởng từ [OpenMAIC](https://github.com/THU-MAIC/OpenM
 Thử giao diện không cần 9Router: `npm run dev:mock` (http://localhost:3001, AI giả lập). Kiểm thử tự động: `npm test`.
 Kế hoạch và tiến độ chi tiết: [PROJECT.md](PROJECT.md).
 
-## Đưa lên mạng để hai người test
+## Cho bạn bè test qua link tạm
 
-GitHub lưu mã nguồn của dự án. GitHub Pages (`github.io`) chỉ chạy web tĩnh, không chạy được
-máy chủ Node.js và Socket.IO cần cho đăng nhập, lớp học, chat và livestream.
-Triển khai toàn bộ ứng dụng thành **Web Service** trên Render để hai người dùng chung một link HTTPS.
+GitHub chỉ lưu mã nguồn (GitHub Pages không chạy được máy chủ Node.js và Socket.IO). Để bạn bè ở máy khác vào thử, chạy server trên máy bạn rồi mở tunnel Cloudflare:
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/anhquan27it/english-livestream-webesite)
+1. Chạy `npm start` (nên bật LiveKit Cloud để hình/tiếng ổn định, xem mục bên dưới).
+2. Ở cửa sổ khác: `cloudflared tunnel --url http://localhost:3000` (cài bằng `winget install Cloudflare.cloudflared`).
+3. Gửi bạn link `https://....trycloudflare.com` mà lệnh in ra. Link đổi mỗi lần chạy và chết khi bạn tắt tunnel hoặc máy; là HTTPS nên camera/micro dùng được.
 
-1. Bấm **Deploy to Render**, đăng nhập Render và cấp quyền truy cập repository nếu được yêu cầu.
-2. Kiểm tra dịch vụ dùng gói **Free**, rồi chọn triển khai. File `render.yaml` đã khai báo cấu hình.
-3. Khi dịch vụ báo **Live**, mở URL HTTPS `https://<tên-dịch-vụ>.onrender.com` mà Render cung cấp
-   và gửi cùng link đó cho bạn của bạn.
-
-Nếu tạo Web Service thủ công, chọn repository này, runtime **Node**, build command
-`npm ci --omit=dev`, start command `npm start`, health check `/healthz`, gói **Free**.
+Muốn chạy lâu dài, công khai: thuê VPS + HTTPS (Caddy/Nginx) + tên miền, xem *Lộ trình công khai* trong [PROJECT.md](PROJECT.md).
 
 ### Thử vai giáo viên và học sinh
 
-1. Bạn của bạn đăng nhập `teacher@demo.com`, mật khẩu `123456`, chọn lớp **IELTS Speaking 6.5+**
-   và bắt đầu livestream. Cho phép camera/micro khi trình duyệt hỏi.
+1. Đăng nhập `teacher@demo.com`, mật khẩu `123456`, chọn lớp **IELTS Speaking 6.5+** và bắt đầu livestream. Cho phép camera/micro khi trình duyệt hỏi.
 2. Bạn đăng nhập `student1@demo.com`, mật khẩu `123456`, mở cùng lớp và chọn **Vào học**.
 3. Thử xem/nghe livestream, gửi chat, giơ tay, ghim từ vựng, chia sẻ màn hình và kết thúc buổi học.
 4. Nếu thử cả hai vai trên một máy, dùng hai hồ sơ trình duyệt hoặc một cửa sổ ẩn danh.
 
-### Giới hạn của bản demo
+### Giới hạn
 
-- Render Free có thể ngủ sau 15 phút không có lưu lượng; lần truy cập tiếp theo có thể mất khoảng một phút để mở lại.
-- `data/db.json` được tạo tự động trên máy chủ, không đưa lên GitHub. Trên Render Free, dữ liệu mới
-  (tài khoản, lớp, lịch sử, phiên đăng nhập) bị mất khi máy chủ restart, redeploy hoặc ngủ.
-  Khi đó ứng dụng tạo lại tài khoản/lớp mẫu; hãy đăng nhập lại và mở lại buổi học.
-- Livestream dùng WebRTC với STUN. Hai mạng khác nhau có thể cần TURN server nếu chat hoạt động
-  nhưng không nhận được video/âm thanh. Bản này chưa cấu hình TURN.
-- Tài khoản và mật khẩu mẫu chỉ phục vụ test. Chưa dùng bản demo này để lưu dữ liệu học viên thật.
-
-Tham khảo: [Render Node.js](https://render.com/docs/deploy-node-express-app),
-[giới hạn gói Free](https://render.com/docs/free).
+- Không bật LiveKit thì video dùng WebRTC P2P với STUN: hai mạng khác nhau có thể cần TURN nếu chat chạy nhưng không có hình/tiếng.
+- `data/db.json` được tạo tự động trên máy bạn, không đưa lên GitHub.
+- Tài khoản và mật khẩu mẫu chỉ phục vụ test; đừng dùng để lưu dữ liệu học viên thật.
 
 ## LiveKit Cloud, chất lượng camera và quản trị
 
