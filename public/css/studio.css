@@ -479,6 +479,10 @@
   .stage { max-height: none; flex: 1 1 auto; aspect-ratio: auto; min-height: 0; }
   .side-panel { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .06); }
 }
+/* Thanh âm lượng của người xem */
+.vol-range { width: 78px; height: 4px; align-self: center; accent-color: var(--accent, #7c6cff); cursor: pointer; margin: 0 2px; }
+@media (max-width: 600px) { .vol-range { display: none; } }
+
 /* Màn hình cảm ứng: vùng bấm tối thiểu ~40px cho các nút nhỏ của phòng live */
 @media (pointer: coarse) {
   .live-top .back, .live-top .tbtn { min-width: 40px; width: 40px; height: 40px; }

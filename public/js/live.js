@@ -29,6 +29,7 @@ const FAKE_MIC = new URLSearchParams(location.search).has('fakemic');
 let capRec = null, capOn = false, ccHidden = false, capClear = null; // phụ đề trực tiếp
 let LK = false;                // true khi máy chủ bật LiveKit: hình/tiếng đi qua LiveKit thay cho WebRTC P2P
 let ZOOM = false, selectedProvider = '';
+let soundVolume = (() => { try { const v = parseFloat(localStorage.getItem('englive_volume')); return v >= 0 && v <= 1 ? v : 1; } catch { return 1; } })();
 let soundMuted = false;        // học sinh tắt tiếng (với LiveKit, tiếng phát bằng các phần tử <audio> riêng)
 const lkPresent = new Set();   // userId đang có trong phòng LiveKit (giáo viên dùng để hiện trạng thái học sinh)
 let mainMutedBefore = null;     // trạng thái âm thanh phòng chính trước khi vào phòng nhỏ // dùng âm thanh giả để thử khi không có micro
@@ -74,6 +75,7 @@ async function init() {
   catch (e) { return showState('🔌', 'Chưa đọc được cấu hình video', e.message, true); }
   if (selectedProvider === 'livekit' && !LK) return showState('🔌', 'Chưa kết nối được LiveKit', 'Admin cần kiểm tra cấu hình LiveKit của máy chủ.', true);
   $('liveSub').textContent += ZOOM ? ' · Zoom Meeting' : LK ? ' · ' + LiveKitLive.label : ' · P2P';
+  if (!LK) video.volume = soundVolume;
   if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; setZoomLayout(savedZoomLayout()); }
   LessonLive.init({
     isTeacher, socket: null, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel'),
@@ -250,12 +252,12 @@ async function startMedia() {
     return;
   }
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: CAM_QUALITY[camQualityKey()].w }, height: { ideal: CAM_QUALITY[camQualityKey()].h }, frameRate: { ideal: CAM_QUALITY[camQualityKey()].fps }, ...devicePreferences('camera') }, audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: CAM_QUALITY[camQualityKey()].w }, height: { ideal: CAM_QUALITY[camQualityKey()].h }, frameRate: { ideal: CAM_QUALITY[camQualityKey()].fps }, ...devicePreferences('camera') }, audio: { ...micConstraints() } });
   } catch (e) {
     // Một thiết bị lỗi không được kéo theo thiết bị kia: thử riêng micro và camera, báo đúng lý do từng cái
     const gum = navigator.mediaDevices ? (c) => navigator.mediaDevices.getUserMedia(c) : () => Promise.reject(e);
     let audio = [], video = [], aErr = e, vErr = e;
-    try { audio = (await gum({ audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } })).getAudioTracks(); } catch (x) { aErr = x; }
+    try { audio = (await gum({ audio: { ...micConstraints() } })).getAudioTracks(); } catch (x) { aErr = x; }
     if (!audio.length) { try { audio = (await gum({ audio: true })).getAudioTracks(); } catch (x) { aErr = x; } }
     try { video = (await gum({ video: true })).getVideoTracks(); } catch (x) { vErr = x; }
     usingFallback = !video.length;
@@ -571,6 +573,7 @@ function renderControls() {
       ctrl('cReact', 'smile', 'Cảm xúc') + SEP +
       ctrl('cCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '') +
       ctrl('cSound', isSoundMuted() ? 'volume-x' : 'volume-2', isSoundMuted() ? 'Bật tiếng' : 'Âm thanh', isSoundMuted() ? 'off' : '') +
+      '<input type="range" id="cVol" class="vol-range" min="0" max="100" value="' + Math.round(soundVolume * 100) + '" aria-label="Âm lượng" title="Âm lượng">' +
       ctrl('cFull', 'maximize', 'Toàn màn hình') + SEP +
       ctrl('cLeave', 'log-out', 'Rời lớp', 'danger');
     $('cHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); };
@@ -579,6 +582,7 @@ function renderControls() {
     if ($('cMyScreen')) $('cMyScreen').onclick = toggleMyScreen;
     $('cReact').onclick = reactPicker;
     $('cCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); };
+    $('cVol').oninput = (e) => setVolume(e.target.value / 100);
     $('cSound').onclick = () => { setSoundMuted(!isSoundMuted()); if (!isSoundMuted()) $('unmuteBtn')?.remove(); renderControls(); };
     $('cFull').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {}));
     $('cLeave').onclick = () => leave();
@@ -794,7 +798,7 @@ function onSpeaker(info) {
 async function startMic() {
   try {
     if (FAKE_MIC) micStream = new MediaStream([fakeAudio(660)]);
-    else micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
+    else micStream = await navigator.mediaDevices.getUserMedia({ audio: { ...micConstraints() } });
     const track = micStream.getAudioTracks()[0];
     track.enabled = !mutedSelf;
     if (LK) await LiveKitLive.startSpeaking(track);
@@ -1145,7 +1149,7 @@ async function getBreakoutMedia() {
     return new MediaStream([fakeAudio(300 + (h % 400)), canvasTrack()]);
   }
   try {
-    return await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360, ...devicePreferences('camera') }, audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
+    return await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360, ...devicePreferences('camera') }, audio: { ...micConstraints() } });
   } catch {
     return navigator.mediaDevices.getUserMedia({ audio: true }); // không có camera: chỉ tiếng
   }
@@ -1172,6 +1176,11 @@ async function muteTeacherMain(on) {
   if (on) { if (teacherMicBeforeGroup === null) teacherMicBeforeGroup = mic.enabled; if (LK) await LiveKitLive.setTeacherMicMuted(true); else mic.enabled = false; }
   else if (teacherMicBeforeGroup !== null) { const enabled = teacherMicBeforeGroup; teacherMicBeforeGroup = null; if (LK) await LiveKitLive.setTeacherMicMuted(!enabled); else mic.enabled = enabled; }
   renderControls();
+}
+function setVolume(v) {
+  soundVolume = Math.min(1, Math.max(0, v));
+  try { localStorage.setItem('englive_volume', String(soundVolume)); } catch { /* chế độ riêng tư */ }
+  if (LK) LiveKitLive.setVolume(soundVolume); else video.volume = soundVolume;
 }
 const isSoundMuted = () => (LK ? soundMuted : video.muted);
 function setSoundMuted(m) {
@@ -1245,6 +1254,7 @@ async function connectLiveKitStudent() {
   try {
     await LiveKitLive.connect(lkHandlers());
     LiveKitLive.setMuted(soundMuted);
+    LiveKitLive.setVolume(soundVolume);
   } catch (e) {
     showState('🔌', 'Không kết nối được máy chủ video (LiveKit)', e.message, true);
   }

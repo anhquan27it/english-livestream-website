@@ -11,6 +11,7 @@ const LiveKitLive = (() => {
   const videos = {};               // 'screen' | 'camera' -> RemoteTrack đang nhận từ giáo viên
   const spk = {};                  // 'screen' | 'camera' -> { track, identity, name } của học sinh được cấp quyền (camera/chia sẻ màn hình)
   const audioEls = new Map();      // trackSid -> <audio>
+  let volume = 1;                  // âm lượng nghe của người xem (0..1)
   const audioByUser = new Map();   // identity -> MediaStreamTrack (để giáo viên trộn khi ghi hình)
   let muted = false;
   let current = null;              // video track đang gắn vào o.video
@@ -96,7 +97,7 @@ const LiveKitLive = (() => {
         if (o.onFirstVideo) o.onFirstVideo();
       } else if (track.kind === 'audio') {
         const el = track.attach();
-        el.muted = muted;
+        el.muted = muted; el.volume = volume;
         holder().appendChild(el);
         audioEls.set(track.sid, el);
         if (pub.source === Source().Microphone) { // âm thanh màn hình của học sinh vẫn phát, nhưng không dùng làm "giọng" để trộn
@@ -187,6 +188,11 @@ const LiveKitLive = (() => {
     b.onclick = async () => { await room.startAudio(); b.remove(); };
     document.getElementById('stage').appendChild(b);
     if (window.lucide) lucide.createIcons();
+  }
+
+  function setVolume(v) {
+    volume = Math.min(1, Math.max(0, +v || 0));
+    audioEls.forEach((el) => { el.volume = volume; });
   }
 
   function setMuted(m) {
@@ -326,7 +332,7 @@ const LiveKitLive = (() => {
   }
 
   return {
-    isEnabled, connect, disconnect, setMuted, hasVideo, startStudentCamera, startStudentScreen, stopStudent, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
+    isEnabled, connect, disconnect, setMuted, setVolume, hasVideo, startStudentCamera, startStudentScreen, stopStudent, publishTeacher, setCameraQuality, toggleLocal, setTeacherMicMuted, publishScreen, unpublishScreen, publishFile, unpublishFile,
     startSpeaking, stopSpeaking, setSpeakerMuted, joinGroup,
     audioTrackOf: (identity) => audioByUser.get(identity) || null,
     get room() { return room; },

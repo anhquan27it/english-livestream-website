@@ -157,6 +157,10 @@ function connectSocket() {
   return io({ auth: { token: Auth.token } });
 }
 
+// Micro cho giọng nói: khử vọng + khử ồn + tự cân âm lượng, một kênh 48 kHz (khớp Opus của LiveKit)
+function micConstraints() {
+  return { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: { ideal: 48000 }, ...devicePreferences('microphone') };
+}
 function devicePreferences(kind) {
   try { const d = JSON.parse(localStorage.getItem('englive_devices') || '{}'); const id = d[kind]; return id ? { deviceId: { ideal: id } } : {}; } catch { return {}; }
 }
