@@ -534,7 +534,10 @@ body.live-body { background: #0f0d1f; color: #fff; }
   .stat b { font-size: 22px; }
   .float-3 { display: none; }
   .float-2 { right: -8px; }
-  .nav-actions .btn-ghost { display: none; }
+  .nav-inner { gap: 8px; }
+  .nav-actions { gap: 4px; flex-shrink: 0; }
+  .nav-actions .btn { padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+  .nav .brand { font-size: 18px; min-width: 0; }
   .hero-card .art { display: none; }
   .ctrl .lbl { display: none; }
   .ctrl { min-width: 50px; height: 50px; padding: 0 14px; }
@@ -550,3 +553,7 @@ body.live-body { background: #0f0d1f; color: #fff; }
   .stats.stats-3 { grid-template-columns: 1fr; }
   .topbar h1 { font-size: 23px; }
 }
+
+/* Màn hình cảm ứng: nút menu di động đủ lớn để chạm */
+@media (pointer: coarse) { .icon-btn.mobile-only { min-width: 40px; min-height: 40px; } }
+@media (max-width: 600px) { .section-title { flex-wrap: wrap; gap: 8px 12px; } }

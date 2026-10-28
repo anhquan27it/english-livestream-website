@@ -464,3 +464,25 @@
 /* Tooltip ở thanh trên/tab chat phải nổi lên trên khung video (khung video đứng sau trong DOM nên trước đây đè lên) */
 .live-top { position: relative; z-index: 30; }
 .panel-tabs { position: relative; z-index: 30; }
+
+/* ---------- Phòng live trên tablet/điện thoại: vừa đúng màn hình, khung chat tự cuộn (không phải kéo cả trang) ---------- */
+@media (max-width: 900px) {
+  .live-app { height: 100dvh; min-height: 0; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+  .stage-wrap { overflow-y: auto; min-height: 0; }
+  .stage { max-height: 46dvh; }
+  .side-panel { height: auto; min-height: 0; border-left: 0; border-top: 1px solid rgba(255, 255, 255, .08); }
+}
+/* Điện thoại xoay ngang: video bên trái, chat bên phải */
+@media (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
+  .live-app { grid-template-columns: minmax(0, 1fr) minmax(220px, 38%); grid-template-rows: minmax(0, 1fr); }
+  .live-body.side-collapsed .live-app { grid-template-columns: minmax(0, 1fr); }
+  .stage { max-height: none; flex: 1 1 auto; aspect-ratio: auto; min-height: 0; }
+  .side-panel { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .06); }
+}
+/* Màn hình cảm ứng: vùng bấm tối thiểu ~40px cho các nút nhỏ của phòng live */
+@media (pointer: coarse) {
+  .live-top .back, .live-top .tbtn { min-width: 40px; width: 40px; height: 40px; }
+  .live-top .code-chip { min-height: 36px; }
+  .icon-btn.mobile-only { min-width: 40px; min-height: 40px; }
+  .panel-tabs button { height: 42px; }
+}
