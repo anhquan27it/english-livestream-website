@@ -28,6 +28,7 @@ let screenStream = null;       // luồng chia sẻ màn hình (có thể kèm �
 const FAKE_MIC = new URLSearchParams(location.search).has('fakemic');
 let capRec = null, capOn = false, ccHidden = false, capClear = null; // phụ đề trực tiếp
 let LK = false;                // true khi máy chủ bật LiveKit: hình/tiếng đi qua LiveKit thay cho WebRTC P2P
+let ZOOM = false, selectedProvider = '';
 let soundMuted = false;        // học sinh tắt tiếng (với LiveKit, tiếng phát bằng các phần tử <audio> riêng)
 const lkPresent = new Set();   // userId đang có trong phòng LiveKit (giáo viên dùng để hiện trạng thái học sinh)
 let mainMutedBefore = null;     // trạng thái âm thanh phòng chính trước khi vào phòng nhỏ // dùng âm thanh giả để thử khi không có micro
@@ -57,6 +58,8 @@ async function init() {
   if (!classId) return showState('🤔', 'Không tìm thấy lớp học', 'Đường dẫn không hợp lệ.', true);
   try {
     const { class: c } = await api('/api/classes/' + classId);
+    selectedProvider = c.live?.provider || '';
+    ZOOM = selectedProvider === 'zoom';
     $('liveTitle').textContent = c.live ? c.live.title : c.name;
     $('liveSub').textContent = `${c.name} · ${c.teacher}`;
     if (c.code) showClassCode(c.code); // chỉ giáo viên phụ trách/admin nhận được mã lớp
@@ -67,19 +70,18 @@ async function init() {
 
   setupUi();
   // Máy chủ bật LiveKit thì hình/tiếng đi qua LiveKit; thêm ?p2p=1 vào URL để ép dùng WebRTC P2P cũ (chỉ để thử/đối chiếu)
-  try { LK = !new URLSearchParams(location.search).has('p2p') && (await LiveKitLive.isEnabled()); }
+  try { LK = !ZOOM && selectedProvider !== 'p2p' && (await LiveKitLive.isEnabled()); }
   catch (e) { return showState('🔌', 'Chưa đọc được cấu hình video', e.message, true); }
-  $('liveSub').textContent += LK ? ' · ' + LiveKitLive.label : ' · P2P';
+  if (selectedProvider === 'livekit' && !LK) return showState('🔌', 'Chưa kết nối được LiveKit', 'Admin cần kiểm tra cấu hình LiveKit của máy chủ.', true);
+  $('liveSub').textContent += ZOOM ? ' · Zoom Meeting' : LK ? ' · ' + LiveKitLive.label : ' · P2P';
+  if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; }
   LessonLive.init({
     isTeacher, socket: null, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel'),
     onChange: () => aiChat && aiChat.reload(),
   });
-  if (isTeacher) {
+  if (isTeacher && !ZOOM) {
     showState(null, 'Đang bật camera & micro...', 'Hãy cho phép trình duyệt truy cập camera và micro.');
     await startMedia();
-    if (LK) {
-      try { await connectLiveKitTeacher(); } catch (e) { return showState('🔌', 'Không kết nối được máy chủ video (LiveKit)', e.message, true); }
-    }
   }
 
   socket = connectSocket();
@@ -88,6 +90,10 @@ async function init() {
   PadLive.init({ isTeacher, socket, stage: $('stage'), panel: $('padPanel') });
   BreakoutLive.init({ lk: LK, isTeacher, socket, stage: $('stage'), panel: $('boPanel'), getMedia: getBreakoutMedia, muteMain: setMainMuted, muteTeacherMain, teacherTracks: () => (camStream ? camStream.getTracks() : []) });
   socket.on('connect', joinRoom);
+  socket.on('video:changed', () => {
+    if (rec) return toast('Admin đã đổi dịch vụ video. Hãy dừng, lưu bản ghi rồi tải lại trang để tiếp tục.', 'error');
+    location.reload();
+  });
   socket.on('connect_error', () => toast('Mất kết nối máy chủ, đang thử lại...', 'error'));
   socket.on('chat', addChat);
   socket.on('viewers:count', (n) => { $('viewerCount').textContent = n; if (!isTeacher) $('peopleCount').textContent = words.length; });
@@ -101,7 +107,7 @@ async function init() {
   socket.on('reaction', showReaction);
 
   if (isTeacher) {
-    socket.on('viewer:joined', (v) => { viewers.set(v.socketId, v); if (LK) v.state = lkPresent.has(v.userId) ? 'connected' : 'connecting'; renderPeople(); if (!LK) callViewer(v.socketId); });
+    socket.on('viewer:joined', (v) => { viewers.set(v.socketId, v); if (LK) v.state = lkPresent.has(v.userId) ? 'connected' : 'connecting'; renderPeople(); if (!LK && !ZOOM) callViewer(v.socketId); });
     socket.on('viewer:left', ({ socketId }) => { viewers.delete(socketId); closePeer(socketId); renderPeople(); });
     socket.on('hand', ({ socketId, name, raised }) => {
       const v = viewers.get(socketId);
@@ -113,11 +119,11 @@ async function init() {
     // Với LiveKit, trạng thái giáo viên do chính phòng LiveKit báo (ParticipantConnected/Disconnected); socket chỉ là kênh điều khiển
     // và có thể rớt thoáng qua mà hình vẫn chạy, nên bỏ qua hai sự kiện này để lớp phủ không kẹt.
     socket.on('teacher:left', () => {
-      if (LK) return;
+      if (LK || ZOOM) return;
       closeStudentPeer();
       showState('📡', 'Giáo viên tạm mất kết nối', 'Đang chờ giáo viên quay lại...');
     });
-    socket.on('teacher:joined', () => { if (LK) return; showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'); });
+    socket.on('teacher:joined', () => { if (LK || ZOOM) return; showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'); });
     socket.on('hand:lowered', () => { handRaised = false; renderControls(); toast('Giáo viên đã hạ tay của bạn'); });
     socket.on('speak:granted', (d) => { spkPerms = (d && d.perms) || { camera: false, screen: false }; startMic(); });
     socket.on('speak:perms', ({ perms } = {}) => {
@@ -138,6 +144,7 @@ function joinRoom() {
   socket.emit('room:join', { classId }, (res) => {
     if (res.error) return finish('🔒', 'Không thể tham gia', res.error);
     live = res.live;
+    if (selectedProvider && live.provider !== selectedProvider) return location.reload();
     $('liveTitle').textContent = live.title;
     $('liveBadge').hidden = false;
     $('viewerCount').textContent = live.viewers;
@@ -148,6 +155,10 @@ function joinRoom() {
     PdfLive.apply(res.pdf || null);
     PadLive.apply(res.pad || null);
     if (!isTeacher && LK) connectLiveKitStudent();
+    if (ZOOM) {
+      hideState();
+      ZoomLive.connect({ classId, container: $('zoomHost'), onStatus: (message, error = false) => { $('zoomNotice').hidden = false; $('zoomNotice').textContent = message; $('zoomNotice').classList.toggle('error', error); } });
+    }
     if (isTeacher && res.breakout) BreakoutLive.setState(res.breakout);
     if (!isTeacher && res.breakout) BreakoutLive.rejoin(res.breakout);
     const wanted = new URLSearchParams(location.search).get('lesson');
@@ -155,8 +166,10 @@ function joinRoom() {
     if (isTeacher) {
       // Kết nối (lại) tới tất cả học sinh đang có mặt
       viewers.clear();
-      res.viewers.forEach((v) => { viewers.set(v.socketId, v); if (LK) v.state = lkPresent.has(v.userId) ? 'connected' : 'connecting'; else callViewer(v.socketId); });
+      res.viewers.forEach((v) => { viewers.set(v.socketId, v); if (LK) v.state = lkPresent.has(v.userId) ? 'connected' : 'connecting'; else if (!ZOOM) callViewer(v.socketId); });
       renderPeople();
+      if (LK) connectLiveKitTeacherAfterJoin(); else hideState();
+    } else if (ZOOM) {
       hideState();
     } else if (res.teacherOnline) {
       showState(null, 'Đang kết nối tới giáo viên...', 'Buổi học sẽ hiển thị trong giây lát.');
@@ -360,6 +373,7 @@ function closePeer(id) {
 }
 
 async function onSignal({ from, data }) {
+  if (ZOOM) return;
   try {
     if (isTeacher) {
       const p = peers.get(from);
@@ -447,7 +461,7 @@ function setupUi() {
   };
   const panels = { chat: 'chatPanel', people: 'peoplePanel', lesson: 'lessonPanel', ai: 'aiPanel', breakout: 'boPanel', pad: 'padPanel' };
   $('tabLesson').hidden = !isTeacher;
-  $('tabBo').hidden = !isTeacher;
+  $('tabBo').hidden = !isTeacher || ZOOM;
   $('tabPad').hidden = !isTeacher;
   $('tabAi').hidden = isTeacher;
   if (!isTeacher) aiChat = AiChat.mount($('aiPanel'), { classId, dark: true });
@@ -479,7 +493,21 @@ function ctrl(id, icon, label, cls = '') {
 }
 const SEP = '<span class="ctrl-sep" aria-hidden="true"></span>';
 
+function renderZoomControls() {
+  const box = $('controls');
+  box.innerHTML = ctrl('zReconnect', 'video', 'Kết nối Zoom') + SEP +
+    (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + ctrl('zReact', 'smile', 'Cảm xúc')) + SEP +
+    ctrl('zFull', 'maximize', 'Toàn màn hình') + ctrl('zLeave', isTeacher ? 'square' : 'log-out', isTeacher ? 'Kết thúc buổi học' : 'Rời lớp', 'danger');
+  $('zReconnect').onclick = ZoomLive.retry;
+  $('zFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {});
+  $('zLeave').onclick = isTeacher ? endLive : leave;
+  if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zRecord').onclick = toggleZoomRecord; }
+  else { $('zHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); }; $('zReact').onclick = reactPicker; }
+  icons();
+}
+
 function renderControls() {
+  if (ZOOM) return renderZoomControls();
   const box = $('controls');
   if (isTeacher) {
     const a = BreakoutLive.teacherMedia.find(t => t.kind === 'audio') || (camStream && camStream.getAudioTracks()[0]);
@@ -549,10 +577,10 @@ function renderPeople() {
   $('peopleCount').textContent = list.length;
   panel.innerHTML = list.length ? `<div class="panel-heading">Đang xem · ${list.length}</div>` + list.map(([id, v]) => `
     <div class="viewer">${avatar(v.name, 'sm round')}
-      <div class="info">${esc(v.name)}<small>${v.state === 'connected' ? '● Đang xem' : v.state === 'failed' ? 'Kết nối lỗi' : 'Đang kết nối...'}</small></div>
+      <div class="info">${esc(v.name)}<small>${ZOOM ? 'Đã vào EngLive · video xem trong Zoom' : v.state === 'connected' ? '● Đang xem' : v.state === 'failed' ? 'Kết nối lỗi' : 'Đang kết nối...'}</small></div>
       ${v.hand ? `<span class="hand">✋</span><button class="icon-btn" data-lower="${id}" title="Hạ tay"><i data-lucide="hand"></i></button>` : ''}
       <button class="icon-btn" data-star="${id}" title="Tặng sao (+10 điểm)"><i data-lucide="star"></i></button>
-      <button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? 'Thu lại mic' : 'Cho phép phát biểu'}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>
+      ${ZOOM ? '' : `<button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? 'Thu lại mic' : 'Cho phép phát biểu'}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>`}
       ${LK && speakerSocket === id ? `<button class="icon-btn ${speaker && speaker.perms && speaker.perms.camera ? 'speaking' : ''}" data-perm="camera" title="${speaker && speaker.perms && speaker.perms.camera ? 'Thu quyền camera' : 'Cho phép bật camera'}"><i data-lucide="video"></i></button><button class="icon-btn ${speaker && speaker.perms && speaker.perms.screen ? 'speaking' : ''}" data-perm="screen" title="${speaker && speaker.perms && speaker.perms.screen ? 'Thu quyền chia sẻ màn hình' : 'Cho phép chia sẻ màn hình'}"><i data-lucide="monitor-up"></i></button>` : ''}
       <button class="icon-btn" data-kick="${id}" title="Mời rời buổi học"><i data-lucide="user-x"></i></button>
     </div>`).join('')
@@ -571,7 +599,7 @@ function renderPeople() {
   panel.querySelectorAll('[data-lower]').forEach((b) => (b.onclick = () => socket.emit('hand:lower', { socketId: b.dataset.lower })));
   panel.querySelectorAll('[data-kick]').forEach((b) => (b.onclick = async () => {
     const v = viewers.get(b.dataset.kick);
-    if (await confirmModal('Mời học sinh rời buổi học?', `${v ? v.name : 'Học sinh'} sẽ bị ngắt khỏi livestream này (vẫn ở trong lớp).`, 'Mời rời')) {
+    if (await confirmModal('Mời học sinh rời buổi học?', ZOOM ? 'Thao tác này xóa quyền truy cập EngLive. Chủ trì cần dùng Remove trong Zoom để xóa người đó khỏi cuộc họp và tắt cho phép vào lại.' : `${v ? v.name : 'Học sinh'} sẽ bị ngắt khỏi livestream này (vẫn ở trong lớp).`, 'Mời rời')) {
       socket.emit('kick', { socketId: b.dataset.kick });
     }
   }));
@@ -656,6 +684,7 @@ function finish(emoji, title, text) {
   $('liveBadge').hidden = true;
   if (rec) stopRecord();
   if (LK) LiveKitLive.disconnect();
+  if (ZOOM) ZoomLive.disconnect();
   BreakoutLive.close();
   stopCaptions();
   if (listenEl) listenEl.pause();
@@ -849,6 +878,35 @@ function listenModal() {
 }
 
 // ---------------- Ghi hình buổi học (video + âm thanh của giáo viên) ----------------
+async function toggleZoomRecord() {
+  if (rec) return stopRecord();
+  if (!window.MediaRecorder || !navigator.mediaDevices?.getDisplayMedia) return toast('Ghi tab cần Chrome/Edge trên máy tính.', 'error');
+  let capture, mic, context;
+  try {
+    toast('Chọn tab EngLive hiện tại và bật Chia sẻ âm thanh tab.');
+    capture = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, preferCurrentTab: true, selfBrowserSurface: 'include' });
+    if (!capture.getAudioTracks().length) throw new Error('Chưa chọn âm thanh tab. Hãy thử lại và bật Chia sẻ âm thanh tab để thu được tiếng Zoom.');
+    mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    context = new AudioContext();
+    const destination = context.createMediaStreamDestination();
+    for (const stream of [capture, mic]) context.createMediaStreamSource(new MediaStream(stream.getAudioTracks())).connect(destination);
+    const stream = new MediaStream([...capture.getVideoTracks(), ...destination.stream.getAudioTracks()]);
+    const mimeType = ['video/webm;codecs=vp8,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t));
+    const mr = new MediaRecorder(stream, { mimeType }), chunks = [], startedAt = Date.now();
+    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = () => {
+      for (const s of [capture, mic]) s.getTracks().forEach(t => t.stop()); context.close();
+      const seconds = Math.round((Date.now() - startedAt) / 1000), blob = new Blob(chunks, { type: 'video/webm' });
+      if (window.ysFixWebmDuration) window.ysFixWebmDuration(blob, seconds * 1000, fixed => saveRecordingModal(fixed, seconds)); else saveRecordingModal(blob, seconds);
+    };
+    capture.getVideoTracks()[0].onended = stopRecord;
+    mr.start(2000); rec = { mr, startedAt, tick: setInterval(renderControls, 1000), withSlides: true }; renderControls();
+  } catch (err) {
+    for (const s of [capture, mic]) s?.getTracks().forEach(t => t.stop()); context?.close();
+    if (err.name !== 'NotAllowedError') toast(err.message || 'Không ghi được tab.', 'error');
+  }
+}
+
 async function toggleRecord() {
   if (rec) return stopRecord();
   if (typeof MediaRecorder === 'undefined') return toast('Trình duyệt này không hỗ trợ ghi hình.', 'error');
@@ -1136,6 +1194,15 @@ function lkHandlers() {
       else if (st === 'lost' && !ended) showState('🔌', 'Mất kết nối video', 'Hãy tải lại trang để vào lại lớp.', true);
     },
   };
+}
+
+let lkTeacherConnecting = false;
+async function connectLiveKitTeacherAfterJoin() {
+  if (LiveKitLive.room || lkTeacherConnecting) return;
+  lkTeacherConnecting = true;
+  try { await connectLiveKitTeacher(); if (!ended) hideState(); }
+  catch (e) { if (!ended) showState('🔌', 'Không kết nối được máy chủ video (LiveKit)', e.message, true); }
+  finally { lkTeacherConnecting = false; }
 }
 
 async function connectLiveKitTeacher() {

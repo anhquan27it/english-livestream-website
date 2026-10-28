@@ -75,7 +75,7 @@ function renderClassList(items) {
         <p>${esc(c.description || '')}</p>
         <div class="class-meta">
           <span><i data-lucide="user-round"></i>${esc(c.teacher)}</span>
-          <span><i data-lucide="users"></i>${c.studentCount} học sinh</span>
+          <span><i data-lucide="users"></i>${c.studentCount}/${c.maxStudents} học sinh</span>
         </div>
       </div>
         <div class="catalog-actions">

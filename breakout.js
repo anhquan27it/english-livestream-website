@@ -50,6 +50,7 @@ function init({ io, lives, lk, onGroupStart }) {
     socket.on('breakout:start', ({ size, minutes } = {}, ack) => {
       const live = teacherLive();
       if (!live) return reply(ack)({ error: 'Không có quyền.' });
+      if (live.video?.provider === 'zoom') return reply(ack)({ error: 'Hãy chia nhóm bằng chức năng Breakout Rooms trong Zoom.' });
       const ids = [...live.viewers.keys()];
       if (ids.length < 2) return reply(ack)({ error: 'Cần ít nhất 2 học sinh trong phòng để chia nhóm.' });
       if (onGroupStart) onGroupStart(live, socket.data.classId);

@@ -195,7 +195,7 @@ function buildSidebar(role, active) {
   const isAdmin = Auth.user && Auth.user.role === 'admin';
   const nav = isAdmin ? [
     ['overview', '/admin.html#overview', 'layout-dashboard', 'Tổng quan'], ['users', '/admin.html#users', 'users', 'Tài khoản'], ['classes', '/admin.html#classes', 'school', 'Lớp học'], ['schedule', '/admin.html#schedule', 'calendar-days', 'Thời khóa biểu'],
-    ['media', '/admin.html#media', 'folder-open', 'Tài liệu & bản ghi'], ['settings', '/admin.html#settings', 'settings', 'Hệ thống'], ['audit', '/admin.html#audit', 'scroll-text', 'Nhật ký'],
+    ['media', '/admin.html#media', 'folder-open', 'Tài liệu & bản ghi'], ['video', '/video-settings.html', 'video', 'Phòng học trực tuyến'], ['settings', '/admin.html#settings', 'settings', 'Hệ thống'], ['audit', '/admin.html#audit', 'scroll-text', 'Nhật ký'],
     ['ai', '/ai-settings.html', 'sparkles', 'Cài đặt AI'],
   ] : role === 'teacher'
     ? [['overview', '/teacher.html', 'layout-dashboard', 'Tổng quan'], ['lessons', '/lessons.html', 'presentation', 'Bài giảng']]

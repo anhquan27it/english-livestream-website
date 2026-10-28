@@ -97,6 +97,13 @@ function init({ io, lives }) {
     };
     const reply = (ack) => (typeof ack === 'function' ? ack : () => {});
 
+    function rememberSlide(live) {
+      const scene = live.lesson && live.lesson.scenes[live.slideIndex];
+      if (!scene || scene.type !== 'slide') return;
+      const review = live.reviewLessons && live.reviewLessons[live.reviewLessons.length - 1];
+      if (review && !review.slides.some(s => s.index === live.slideIndex)) review.slides.push({ index: live.slideIndex, scene: JSON.parse(JSON.stringify(L.publicScene(scene))) });
+    }
+
     socket.on('lesson:present', ({ lessonId } = {}, ack) => {
       const live = teacherCtx();
       if (!live) return reply(ack)({ error: 'Bạn không có quyền điều khiển buổi học này.' });
@@ -106,6 +113,9 @@ function init({ io, lives }) {
       if (live.pdf) { live.pdf = null; io.to('live:' + socket.data.classId).emit('pdf:state', null); } // không chiếu PDF và bài giảng cùng lúc
       live.lesson = { id: lesson.id, title: lesson.title, scenes: JSON.parse(JSON.stringify(lesson.scenes)) };
       live.slideIndex = 0;
+      live.reviewLessons = live.reviewLessons || [];
+      live.reviewLessons.push({ title: lesson.title, slides: [] });
+      rememberSlide(live);
       live.activity = null;
       // Gắn bài vào lớp để học sinh hỏi AI sau buổi học
       if (!lesson.classIds.includes(socket.data.classId)) lesson.classIds.push(socket.data.classId);
@@ -131,6 +141,7 @@ function init({ io, lives }) {
       const next = Math.min(live.lesson.scenes.length - 1, Math.max(0, index));
       endActivity(live); // đổi slide khi đang mở hoạt động -> tự chốt để không mất điểm
       live.slideIndex = next;
+      rememberSlide(live);
       live.activity = null;
       broadcast(live);
     });

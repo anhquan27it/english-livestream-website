@@ -29,6 +29,28 @@ module.exports = async function(c) {
     assert.equal(d.classes.length,1);assert.equal(d.classes[0].canManage,true);
     assert.equal((await api(assistantToken,'POST','/api/learning/assignments',{classId:classes.find(x=>x.id!==ielts.id).id,title:'No',prompt:'No',dueAt:Date.now()+60000})).status,403);
   });
+  await test('sĩ số lớp được thực thi khi thêm, duyệt và admin thay đổi', async()=>{
+    assert.equal((await api(T,'POST','/api/classes',{name:'Sai',maxStudents:0})).status,400);
+    const made=await api(T,'POST','/api/classes',{name:'Lớp giới hạn',maxStudents:1});
+    assert.equal(made.status,200);const c=made.body.class;assert.equal(c.maxStudents,1);
+    assert.equal((await api(T,'POST',`/api/classes/${c.id}/students`,{email:'student1@demo.com'})).status,200);
+    assert.equal((await api(S3,'POST','/api/join',{code:c.code})).status,200);
+    const third=(await api(S3,'GET','/api/me')).body.user;
+    assert.equal((await api(T,'POST',`/api/classes/${c.id}/requests/${third.id}/approve`)).status,409);
+    assert.equal((await api(T,'POST',`/api/classes/${c.id}/students`,{email:'student3@demo.com'})).status,409);
+    assert.equal((await api(A,'PATCH',`/api/admin/classes/${c.id}`,{studentIds:[third.id,(await api(S1,'GET','/api/me')).body.user.id]})).status,409);
+    assert.equal((await api(A,'PATCH',`/api/admin/classes/${c.id}`,{maxStudents:2})).status,200);
+    assert.equal((await api(T,'POST',`/api/classes/${c.id}/requests/${third.id}/approve`)).status,200);
+    assert.equal((await api(A,'PATCH',`/api/admin/classes/${c.id}`,{maxStudents:1})).status,409);
+    await api(A,'DELETE',`/api/admin/classes/${c.id}`);
+  });
+  await test('lưu hơn 50 buổi thay vì xóa lịch sử cũ',async()=>{
+    const c=(await api(T,'POST','/api/classes',{name:'Lịch sử kiểm thử'})).body.class;
+    for(let i=0;i<51;i++){assert.equal((await api(T,'POST',`/api/classes/${c.id}/live`,{title:'Buổi '+i})).status,200);assert.equal((await api(T,'DELETE',`/api/classes/${c.id}/live`)).status,200);}
+    const saved=(await api(T,'GET','/api/classes')).body.classes.find(x=>x.id===c.id);
+    assert.equal(saved.history.length,51);assert.equal(saved.history[50].title,'Buổi 0');
+    await api(A,'DELETE',`/api/admin/classes/${c.id}`);
+  });
   await test('lịch học phát hiện trùng lớp và trùng giáo viên',async()=>{
     const startsAt=Date.now()+3600000,endsAt=startsAt+3600000;
     const body={classId:ielts.id,title:'Speaking',startsAt,endsAt};

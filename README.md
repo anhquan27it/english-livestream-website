@@ -1,5 +1,36 @@
 # EngLive — Web học tiếng Anh livestream
 
+## Zoom Meeting SDK + LiveKit (2026-10-28)
+
+**Callback HTTP local cần PKCE:** Zoom không cho luồng confidential OAuth thông thường quay về `http://127.0.0.1`. Trong General App → Basic information → App credentials, bật **Use Public Client OAuth**, lấy **Public Client ID** và nhập vào ô riêng trong admin EngLive. Giữ nguyên Client ID/Secret Meeting SDK. EngLive dùng Public Client ID + PKCE S256 để xin quyền, đổi code và refresh token; SDK vẫn ký bằng Client ID/Secret gốc. Phải restart server sau cập nhật. Khi chưa nhập Public Client ID, EngLive chặn bắt đầu OAuth HTTP thay vì đưa sang trang Zoom báo Invalid redirect. Với callback HTTPS, có thể giữ luồng confidential Client ID/Secret. Xem [tài liệu loopback/PKCE của Zoom](https://developers.zoom.us/docs/integrations/oauth/#using-a-loopback-redirect-uri).
+
+**Luồng chính: giáo viên chủ trì ngay trong EngLive.** Admin nhập OAuth Redirect URL giống nhau trong General App và EngLive (khi chạy cổng 3000: `http://127.0.0.1:3000/api/zoom/oauth/callback`), thêm Scopes `user:read:user`, `user:read:zak`, rồi bấm **Chủ trì trong web cho tất cả lớp Zoom**. Giáo viên **Liên kết Zoom một lần** bằng đúng email chủ trì. Từ đó bấm Livestream trong EngLive để mở cuộc họp bằng SDK role 1 + ZAK, không mở Zoom trước. Tài khoản Zoom vẫn cần tồn tại và lần đầu cần đăng nhập/cấp quyền OAuth; bản thân liên kết không nâng gói. Khi deploy HTTPS, phải cập nhật URL callback đúng tên miền ở cả hai nơi.
+
+Gán phòng mới mặc định chủ trì trong web. Trước khi tạo buổi, máy chủ kiểm tra cấu hình OAuth và đúng tài khoản liên kết; chưa đủ điều kiện thì hướng dẫn thiết lập trước, không tạo buổi chờ. Các cấu hình desktop cũ chỉ đổi khi admin chọn lại hoặc bấm nút áp dụng hàng loạt; buổi đang chạy cần kết thúc và mở lại để nhận cách chủ trì mới. Luồng desktop bên dưới chỉ là lựa chọn thử/dự phòng.
+
+Admin vào **Phòng học trực tuyến** (`/video-settings.html`) để chọn dịch vụ mặc định, đặt riêng dịch vụ cho tất cả buổi mở trong một ngày (múi giờ Việt Nam), gán meeting theo lớp/ngày và chuyển dịch vụ của một buổi đang chạy. Buổi đã mở giữ cấu hình riêng; thay đổi cấu hình ngày không tự đổi các buổi đang học. Chuyển dịch vụ giữ slide/điểm/chuyên cần nhưng tải lại trang của mọi người; cần dừng và lưu bản ghi trước. Không tự chuyển sang LiveKit khi Zoom lỗi.
+
+Thử miễn phí bằng **Zoom Workplace Basic**: tối đa 100 người gồm chủ trì, khoảng 40 phút/buổi, mỗi chủ trì một buổi đồng thời. Đây là **Meeting SDK**, không phải Video SDK tính theo phút. Ứng dụng không mua gói, bật ghi Cloud, gọi điện hay tạo tài nguyên trả phí; gói/tài khoản Zoom và sử dụng LiveKit Cloud vẫn do nhà cung cấp quản lý. Không thể cam kết mọi tính năng của LiveKit đều có trên Zoom Basic.
+
+1. Trong [Zoom App Marketplace](https://marketplace.zoom.us/), tạo **General App**, bật **Embed → Meeting SDK**. Dùng Development Client ID/Client Secret cho thử nội bộ.
+2. Nhập khóa trong trang admin (hoặc biến `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`). Secret chỉ ở máy chủ, không dán vào chat hoặc commit. Không đưa `data/` và các bản backup lên Git.
+3. Tạo meeting trong **cùng tài khoản Zoom sở hữu SDK app**. Gán Meeting ID, passcode và email chủ trì cho lớp ở trang admin. Meeting ngoài tài khoản có thể yêu cầu app xét duyệt và ZAK/OBF; bản này chưa triển khai OBF.
+4. Cách thử đơn giản: chọn **Mở bằng ứng dụng Zoom**. Giáo viên mở meeting trong ứng dụng Zoom trước, rồi giáo viên và học sinh vào EngLive; SDK tham gia với role 0. Tắt âm thanh ở một nơi để tránh vọng. Quyền host quản lý ở ứng dụng Zoom.
+5. Muốn chủ trì trực tiếp trong web: khai báo OAuth Redirect URL `https://<tên-miền>/api/zoom/oauth/callback` trong cả General App và admin EngLive (`ZOOM_REDIRECT_URI` cũng được hỗ trợ; khi thử local dùng 127.0.0.1 hoặc [::1], không dùng hostname localhost cho callback Zoom). Thêm quyền xem user và ZAK token, theo Zoom hiện là `user:read:user` và `user:read:zak`. Giáo viên bấm **Kết nối Zoom**, đăng nhập đúng email chủ trì; admin chọn **Chủ trì trong web**. Chữ ký role 1 và ZAK chỉ cấp cho giáo viên phụ trách có socket cùng phiên đã tham gia. OAuth access/refresh token lưu riêng ở máy chủ; state một lần và có hạn dùng.
+6. Chọn Zoom cho ngày thử, mở buổi bằng giáo viên, vào bằng học sinh ở trình duyệt khác. Từ khóa giả chỉ kiểm tra được tải SDK và xử lý lỗi, không có hình/tiếng thật. Admin có thể chuyển buổi sang LiveKit đã được cấu hình để dự phòng.
+
+SDK client view 6.2.0 được tải từ CDN chính thức của Zoom trong iframe cùng origin để tách CSS. Cần Internet và HTTPS khi deploy (localhost dùng thử được). JWT bật WebRTC video trên trình duyệt hỗ trợ. Không dùng `?p2p=1` để vượt lựa chọn dịch vụ của admin.
+
+| Khi dùng Zoom | Cách hoạt động |
+| --- | --- |
+| Slide, game, điểm, chat EngLive, AI, bảng viết, PDF, xem lại slide | Giữ qua Socket.IO và API EngLive |
+| Mic, camera, share màn hình/âm thanh, phụ đề, breakout | Dùng UI Zoom, tùy quyền/gói/trình duyệt; không đồng bộ quyền mic/phòng nhóm với LiveKit |
+| Chuyên cần | Thời gian có mặt trong EngLive; chưa xác minh thời gian kết nối video Zoom |
+| Ghi hình | Ghi tab trên Chrome/Edge, cần chọn âm thanh tab và cho phép micro, lưu bằng upload của EngLive; chưa đồng bộ Zoom Cloud, chưa kiểm thử thiết bị thật |
+| Kick/kết thúc | Xóa quyền EngLive và rời iframe; chủ trì cần dùng Remove/End trong Zoom để chắc chắn xóa người/kết thúc cuộc họp. Đặc biệt khi host đang mở ứng dụng Zoom riêng |
+
+Kiểm thử: `npm test` bao gồm mạng Zoom giả lập cho OAuth, chữ ký/phân quyền, chọn theo ngày, chặn trùng chủ trì/phòng và chuyển sang LiveKit; không tự gọi Zoom thật. Thông tin chính thức: [xác thực SDK](https://developers.zoom.us/docs/meeting-sdk/auth/), [khởi tạo SDK](https://developers.zoom.us/docs/meeting-sdk/web/get-started/), [Zoom Basic](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0061206).
+
 ## Bản nâng cấp quản trị & học tập (2026-10-26)
 
 Vẫn dùng JSON, chưa cần PostgreSQL. Để bật admin trên dữ liệu hiện tại:

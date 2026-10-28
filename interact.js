@@ -13,6 +13,7 @@ function init({ io, lives, present, lk }) {
 
   // Một học sinh được phát biểu tại một thời điểm
   async function setSpeaker(live, classId, socketId) {
+    if (live.video?.provider === 'zoom') return !socketId;
     const revision = live.speakerRevision = (live.speakerRevision || 0) + 1;
     const prev = live.speaker;
     const userOf = (sid) => (live.viewers.get(sid) || {}).userId;
@@ -60,6 +61,7 @@ function init({ io, lives, present, lk }) {
     socket.on('speak:perms', async ({ camera, screen } = {}, ack) => {
       const live = teacherLive();
       if (!live || !live.speaker || !live.viewers.has(live.speaker)) return reply(ack)({ error: 'Hãy cho một học sinh phát biểu trước.' });
+      if (live.video?.provider === 'zoom') return reply(ack)({ error: 'Quản lý micro, camera và chia sẻ trong Zoom.' });
       if (!lk || !lk.enabled) return reply(ack)({ error: 'Chia sẻ camera/màn hình của học sinh cần bật LiveKit.' });
       const sid = live.speaker, userId = live.viewers.get(sid).userId, classId = socket.data.classId;
       const next = { camera: camera === undefined ? !!(live.speakerPerms || {}).camera : !!camera, screen: screen === undefined ? !!(live.speakerPerms || {}).screen : !!screen };

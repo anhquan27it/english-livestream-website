@@ -70,7 +70,7 @@ async function main() {
     stdio: ['ignore', 'inherit', 'inherit'],
   };
   server = spawn(process.execPath, ['server.js'], serverOptions);
-  for (let i = 0; i < 50; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await sleep(100); }
+  for (let i = 0; i < 200; i++) { try { if ((await fetch(BASE + '/healthz')).ok) break; } catch {} await sleep(100); }
 
   const T = await login('teacher@demo.com');
   const A = await login('admin@test.com', 'admin-test-password');
@@ -195,6 +195,11 @@ async function main() {
     s3.close();
     assert.equal((await api(S3, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'hi' })).status, 403);
   });
+  await test('token bị từ chối khi chưa tham gia phòng và khi không có socket cùng phiên', async () => {
+    assert.equal((await api(T, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 403);
+    assert.equal((await api(S1, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 403);
+    assert.equal((await api(A, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 403);
+  });
   const ts = await connect(T);
   const ss = await connect(S1);
   const tj = await emit(ts, 'room:join', { classId: ielts.id });
@@ -210,6 +215,8 @@ async function main() {
     assert.equal((await emit(ss, 'lesson:present', { lessonId })).error !== undefined, true, 'học sinh không được điều khiển');
   });
   await test('token LiveKit: giáo viên được phát, học sinh chỉ xem; người ngoài lớp bị từ chối', async () => {
+    const secondSession = await login('student1@demo.com');
+    assert.equal((await api(secondSession, 'POST', '/api/livekit/token', { classId: ielts.id })).status, 403);
     const tt = (await api(T, 'POST', '/api/livekit/token', { classId: ielts.id })).body;
     const tc = await lkVerify(tt.token);
     assert.equal(tc.room, 'cls_' + ielts.id);
@@ -571,6 +578,16 @@ async function main() {
     const c = (await api(T, 'GET', '/api/classes')).body.classes.find((x) => x.id === ielts.id);
     assert.equal(c.history[0].lessonTitle, 'Travel English');
     assert.ok(c.history[0].scores[0].points > 0);
+    const session = c.history[0];
+    const review = await api(S1, 'GET', `/api/classes/${ielts.id}/sessions/${session.id}/review`);
+    assert.equal(review.status, 200);
+    assert.equal(review.body.session.lessons[0].slides[0].scene.id, scenes[0].id);
+    assert.ok(review.body.session.lessons.every(l => l.slides.every(slide => slide.scene.type === 'slide')));
+    assert.equal((await api(S3, 'GET', `/api/classes/${ielts.id}/sessions/${session.id}/review`)).status, 403);
+    const report = (await api(S1, 'GET', '/api/learning')).body.reports.find(r => r.classId === ielts.id);
+    assert.equal(report.history[0].hasReview, true);
+    const teacherReport = (await api(T, 'GET', '/api/learning')).body.reports.find(r => r.classId === ielts.id);
+    assert.ok(Object.values(teacherReport.history[0].attendance).some(a => a.name === 'Nguyễn Minh Anh'));
   });
 
   console.log('Bản ghi buổi học');
@@ -652,6 +669,7 @@ async function main() {
     throw new Error('Không khởi động lại được server kiểm thử.');
   };
   await require('./operations-smoke')({ api, test, connect, emit, nextEvent, sleep, restart, A, T, S1, S2, S3, classes, ielts, lessonId, scenes, quizIdx, quiz, mockUrl, dataDir, login, mediaCalls });
+  await require('./zoom-smoke')({ api, test, connect, emit, nextEvent, A, T, S1, S3, lessonId, restart });
 }
 
 main().then(() => { console.log(`\nOK — ${passed} kiểm tra đạt`); cleanup(0); }, (e) => { console.error(e); cleanup(1); });

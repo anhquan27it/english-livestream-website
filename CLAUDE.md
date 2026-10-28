@@ -1,5 +1,13 @@
 # CLAUDE.md — hướng dẫn cho Claude khi làm việc trong repo này
 
+**PKCE Zoom 28/10 (ưu tiên mới nhất):** callback HTTP loopback chỉ được Zoom chấp nhận với public/PKCE hoặc native. Đã thêm ô `publicClientId`/`ZOOM_PUBLIC_CLIENT_ID`, PKCE S256 và token exchange/refresh public, tách khỏi SDK Client ID/Secret. Người dùng phải bật Use Public Client OAuth trong app rồi nhập Public Client ID, giữ callback IP và restart. 75 ca qua bằng mock, chưa thử OAuth PKCE thật. Xem đầu PROJECT.md; chỉ đổi localhost sang IP là chưa đủ.
+
+**Callback Zoom 28/10:** Marketplace không cho hostname localhost. Dùng `http://127.0.0.1:3000/api/zoom/oauth/callback` cho local ở cả Zoom và EngLive; `zoom-urls.js` sinh URL IP, OAuth quay lại origin cũ khi alias loopback cùng cổng. 75 ca qua; cần restart máy chủ. Hướng dẫn localhost trong các ghi chép cũ đã lỗi thời.
+
+**Ưu tiên 28/10:** người dùng muốn giáo viên chỉ dùng EngLive, không mở Zoom trước. Gán mới mặc định SDK host; admin áp dụng chế độ web cho các lớp cũ; OAuth/ZAK là thiết lập một lần bắt buộc. Có preflight trước tạo buổi và UI hướng dẫn/link Zoom; 74 ca qua. Chưa test OAuth thật, cần người dùng khai báo callback/scopes, cấp quyền và restart server. Xem đầu PROJECT.md.
+
+**Cập nhật 2026-10-28:** Đã viết tích hợp Zoom Meeting SDK (`video.js`, `zoom.js`, `zoom-live.js`, iframe `zoom-embed.html`) + admin `/video-settings.html`; cấu hình Zoom/LiveKit mặc định/theo ngày và chuyển phòng đang học, có OAuth host hoặc host bằng desktop. `npm test` 72 ca (Zoom OAuth/media giả lập). SDK thật tải được trên QA nhưng chưa có khóa/meeting/OAuth/media thật. Đọc mục mới nhất đầu PROJECT.md và README trước khi thử; không hứa Zoom Basic đầy đủ như LiveKit. Các thay đổi vẫn chưa commit/push, cần người dùng restart server thật.
+
 **Cập nhật 2026-10-27:** LiveKit Cloud đã chạy thử (gói Build free, xem PROJECT.md đầu file); admin có thanh bên tách mục + tạo/xóa lớp + thời khóa biểu; giáo viên chọn chất lượng camera; `npm test` = 56 ca. Khoá LiveKit **không dán vào chat** (người dùng từng làm lộ, cần revoke); hướng dẫn đặt khoá bằng `Read-Host` + `Get-Clipboard`.
 
 **Bản nâng cấp 2026-10-26:** đọc mục *Cập nhật mới nhất* đầu PROJECT.md. Có admin/assistant, AI settings chỉ admin; bootstrap bằng `npm run admin:create -- email` **khi server đã dừng**. JSON vẫn dùng nhưng có writer lock, backup và snapshot. Có `/admin.html`, `/learning.html`, `/devices.html`; `npm test` mở rộng 56 ca, `npm run test:load` chỉ đo Socket.IO, `npm run dev:qa` cổng 3101 với data tạm. Những dòng 35 test/2 vai trò phía dưới là mô tả lịch sử; cập nhật mới nhất có ưu tiên.

@@ -3,6 +3,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const store = require('./db');
+const capacity = require('./class-capacity');
+const videoProvider = require('./video');
 const text = (v, n = 200) => String(v == null ? '' : v).trim().slice(0, n);
 const manager = (u, c) => u.role === 'admin' || c.teacherId === u.id || (c.assistantIds || []).includes(u.id);
 const active = u => u && !['pending', 'blocked'].includes(u.status);
@@ -16,8 +18,9 @@ function createRouter(ctx) {
   const safeUser = u => ({ ...publicUser(u), createdAt: u.createdAt });
   r.get('/api/admin/overview', async (req, res) => res.json({
     users: db.users.map(safeUser), classes: db.classes, schedules: [...db.schedules].sort((a, b) => a.startsAt - b.startsAt),
-    lives: [...lives].map(([classId, l]) => ({ classId, title: l.title, startedAt: l.startedAt, viewers: l.viewers.size, recovered: !!l.recovered })),
+    lives: [...lives].map(([classId, l]) => ({ classId, title: l.title, startedAt: l.startedAt, viewers: l.viewers.size, recovered: !!l.recovered, provider: l.video?.provider || (lk.enabled ? 'livekit' : 'p2p') })),
     limits: db.settings.limits, storageBytes: storageBytes(), livekit: { enabled: lk.enabled, url: lk.enabled ? lk.config.publicUrl : null, stats: await lk.stats() },
+    video: { today: videoProvider.day(), provider: videoProvider.provider(lk) },
     usage: db.aiUsage, audit: db.audit.slice(0, 100), recordings: db.recordings.map(({ file, ...x }) => x), pdfs: db.pdfs,
     backups: fs.existsSync(path.join(store.dir, 'backups')) ? fs.readdirSync(path.join(store.dir, 'backups')).filter(n => /^db-[\dTZ-]+\.json$/.test(n)).sort().reverse() : [],
   }));
@@ -45,12 +48,14 @@ function createRouter(ctx) {
   // Admin tạo lớp và giao luôn cho một giáo viên
   r.post('/api/admin/classes', (req, res) => {
     const b = req.body || {}, name = text(b.name, 120), t = validTeacher(b.teacherId);
+    const maxStudents = capacity.parse(b.maxStudents);
+    if (!maxStudents) return res.status(400).json({ error: 'Sĩ số tối đa phải là số nguyên từ 1 đến 1000.' });
     if (!name) return res.status(400).json({ error: 'Vui lòng nhập tên lớp.' });
     if (!t) return res.status(400).json({ error: 'Hãy chọn giáo viên phụ trách (đang hoạt động).' });
     const c = {
       id: store.id('c'), name, level: LEVELS.includes(b.level) ? b.level : 'A1', description: text(b.description, 500),
       color: COLORS.includes(b.color) ? b.color : COLORS[db.classes.length % COLORS.length], code: store.classCode(),
-      teacherId: t.id, assistantIds: [], studentIds: [], pendingIds: [], history: [], createdAt: Date.now(),
+      teacherId: t.id, assistantIds: [], studentIds: [], maxStudents, pendingIds: [], history: [], createdAt: Date.now(),
     };
     db.classes.push(c); store.audit(req.user, 'class.create', c.id, c.name); notifyClass(c); res.json({ class: c });
   });
@@ -85,10 +90,16 @@ function createRouter(ctx) {
     if (b.name !== undefined && text(b.name)) c.name = text(b.name, 120);
     if (b.level !== undefined && LEVELS.includes(b.level)) c.level = b.level;
     if (b.description !== undefined) c.description = text(b.description, 500);
+    if (b.maxStudents !== undefined) {
+      const max = capacity.parse(b.maxStudents);
+      if (!max) return res.status(400).json({ error: 'Sĩ số tối đa phải là số nguyên từ 1 đến 1000.' });
+      c.maxStudents = max;
+    }
     if (b.studentIds !== undefined) {
       if (!Array.isArray(b.studentIds) || b.studentIds.some(id => !db.users.some(u => u.id === id && active(u) && u.role === 'student'))) return res.status(400).json({ error: 'Danh sách học sinh không hợp lệ.' });
       c.studentIds = [...new Set(b.studentIds)]; c.pendingIds = c.pendingIds.filter(id => !c.studentIds.includes(id));
     }
+    if (c.studentIds.length > capacity.limit(c)) return res.status(409).json({ error: 'Sĩ số tối đa nhỏ hơn số học sinh trong lớp.' });
     Object.assign(original, c); store.audit(req.user, 'class.update', c.id); notifyClass(c); res.json({ class: c });
   });
   r.delete('/api/admin/classes/:id/live', (req, res) => {
@@ -129,7 +140,7 @@ function createRouter(ctx) {
       schedules: db.schedules.filter(s => ids.has(s.classId)).sort((a, b) => a.startsAt - b.startsAt), assignments,
       submissions: db.submissions.filter(s => assignmentIds.has(s.assignmentId) && (s.userId === req.user.id || manageable.has((assignments.find(a => a.id === s.assignmentId) || {}).classId))),
       vocabulary: db.vocabulary.filter(v => v.userId === req.user.id),
-      reports: classes.map(c => ({ classId: c.id, history: c.history.map(h => ({ title: h.title, startedAt: h.startedAt, endedAt: h.endedAt, attendance: manageable.has(c.id) ? h.attendance : { [req.user.id]: (h.attendance || {})[req.user.id] }, scores: (h.scores || []).filter(s => manageable.has(c.id) || s.userId === req.user.id) })) })),
+      reports: classes.map(c => ({ classId: c.id, history: c.history.map(h => ({ id: h.id, hasReview: !!(h.reviewLessons && h.reviewLessons.length), title: h.title, startedAt: h.startedAt, endedAt: h.endedAt, attendance: manageable.has(c.id) ? Object.fromEntries(Object.entries(h.attendance || {}).map(([uid, a]) => [uid, a && { ...a, name: a.name || db.users.find(u => u.id === uid)?.name || '' }])) : { [req.user.id]: (h.attendance || {})[req.user.id] }, scores: (h.scores || []).filter(s => manageable.has(c.id) || s.userId === req.user.id) })) })),
       results: db.activityResults.filter(a => ids.has(a.classId)).map(a => ({ ...a, answers: a.answers.filter(s => manageable.has(a.classId) || s.userId === req.user.id) })),
     });
   });

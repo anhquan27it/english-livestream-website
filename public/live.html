@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/studio.css" />
+  <link rel="stylesheet" href="/css/zoom.css" />
 </head>
 <body class="live-body">
   <div class="live-app">
@@ -33,6 +34,7 @@
 
       <div class="stage" id="stage">
         <video id="video" playsinline autoplay></video>
+        <div id="zoomHost" hidden></div>
         <div class="spk-tile" id="spkTile" hidden><video id="spkCam" playsinline autoplay muted></video><span id="spkName"></span></div>
         <div class="spk-note" id="spkNote" hidden></div>
         <div class="slide-layer" id="slideLayer"></div>
@@ -46,6 +48,7 @@
       </div>
 
       <div class="controls" id="controls"></div>
+      <p id="zoomNotice" class="zoom-notice" role="status" hidden></p>
     </section>
 
     <aside class="side-panel">
@@ -88,6 +91,7 @@
   <script src="/js/pad.js"></script>
   <script src="/js/pdf-live.js"></script>
   <script src="/js/lk-live.js"></script>
+  <script src="/js/zoom-live.js"></script>
   <script src="/js/breakout.js"></script>
   <script src="/js/live.js"></script>
 </body>

@@ -80,7 +80,7 @@ function create() {
 }
 
 // Route: /api/config cho trình duyệt biết có dùng LiveKit không; /api/livekit/token cấp token theo quyền của người dùng
-function createRouter({ lk, auth, lives, findClass, canAccess, viewerUserId, groupForUser }) {
+function createRouter({ lk, auth, lives, io, findClass, canAccess, viewerUserId, groupForUser }) {
   const router = express.Router();
 
   router.get('/api/config', auth(), (req, res) => {
@@ -94,9 +94,16 @@ function createRouter({ lk, auth, lives, findClass, canAccess, viewerUserId, gro
     if (!canAccess(req.user, c)) return res.status(403).json({ error: 'Bạn không thuộc lớp học này.' });
     const live = lives.get(classId);
     if (!live) return res.status(409).json({ error: 'Buổi học chưa bắt đầu hoặc đã kết thúc.' });
-    if (live.banned && live.banned.has(req.user.id)) return res.status(403).json({ error: 'Bạn đã bị mời rời buổi học này.' });
-    if (live.banned && live.banned.has(req.user.id)) return res.status(403).json({ error: 'Bạn đã bị mời rời buổi học này.' });
-    const isTeacher = ['teacher', 'admin'].includes(req.user.role);
+    if (live.video && live.video.provider !== 'livekit') return res.status(409).json({ error: 'Buổi học này không sử dụng LiveKit.' });
+    const isTeacher = req.user.id === c.teacherId && ['teacher', 'admin'].includes(req.user.role);
+    const joined = () => {
+      if (lives.get(classId) !== live || (live.banned && live.banned.has(req.user.id))) return false;
+      const matches = sid => { const s = io.sockets.sockets.get(sid); return s && s.connected && s.data.token === req.token && s.data.classId === classId; };
+      if (isTeacher) return matches(live.teacherSocket);
+      if (req.user.role !== 'student' || !c.studentIds.includes(req.user.id)) return false;
+      return [...live.viewers].some(([sid, viewer]) => viewer.userId === req.user.id && matches(sid));
+    };
+    if (!joined()) return res.status(403).json({ error: 'Bạn cần tham gia phòng học trước khi kết nối video.' });
     try {
       let params;
       if (!groupId) {
@@ -111,6 +118,7 @@ function createRouter({ lk, auth, lives, findClass, canAccess, viewerUserId, gro
         params = { canPublish: true, sources: [lk.TrackSource.CAMERA, lk.TrackSource.MICROPHONE] };
       }
       const token = await lk.makeToken({ user: req.user, classId, groupId, ...params });
+      if (!joined()) return res.status(403).json({ error: 'Bạn không còn trong phòng học.' });
       res.json({ url: lk.config.publicUrl, token, room: lk.roomName(classId, groupId), identity: req.user.id, canPublish: params.canPublish });
     } catch (e) {
       console.error('[livekit] token', e.message);

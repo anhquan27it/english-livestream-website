@@ -15,6 +15,8 @@ const breakoutMod = require('./breakout');
 const livekitMod = require('./livekit');
 const operations = require('./operations');
 const sessions = require('./sessions');
+const videoProvider = require('./video');
+const zoom = require('./zoom');
 
 store.lock();
 store.applyAdminSetup();
@@ -23,6 +25,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.json({ limit: '2mb' }));
+app.use('/zoom-embed.html', (req, res, next) => { res.set({ 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' }); next(); });
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kiểm tra dịch vụ sau khi triển khai, không cần đăng nhập.
@@ -52,17 +55,18 @@ try {
 const db = () => store.data;
 const findUser = (id) => db().users.find((u) => u.id === id);
 const findClass = (id) => db().classes.find((c) => c.id === id);
+const capacity = require('./class-capacity');
 const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, status: u.status || 'active' };
 
 function liveInfo(classId) {
   const live = lives.get(classId);
   if (!live) return null;
-  return { title: live.title, startedAt: live.startedAt, viewers: live.viewers.size, teacherOnline: !!live.teacherSocket };
+  return { title: live.title, startedAt: live.startedAt, viewers: live.viewers.size, teacherOnline: !!live.teacherSocket, provider: live.video?.provider || (lk.enabled ? 'livekit' : 'p2p') };
 }
 
 function classForTeacher(c) {
   return {
-    ...c,
+    ...c, maxStudents: capacity.limit(c),
     students: c.studentIds.map(findUser).filter(Boolean).map(publicUser),
     pending: c.pendingIds.map(findUser).filter(Boolean).map(publicUser),
     live: liveInfo(c.id),
@@ -79,7 +83,7 @@ function classForStudent(c, userId) {
     description: c.description,
     color: c.color,
     teacher: teacher ? teacher.name : '',
-    studentCount: c.studentIds.length,
+    studentCount: c.studentIds.length, maxStudents: capacity.limit(c),
     status: isMember ? 'member' : 'pending',
     live: isMember ? liveInfo(c.id) : null,
     attended: c.history.filter((h) => (h.attendees || []).includes(userId)).length,
@@ -184,11 +188,30 @@ app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
 const pdfshare = pdfshareMod.init({ io, lives, auth, findClass, canAccess: canAccessLive, present });
 app.use(pdfshare.router);
 app.use(livekitMod.createRouter({
-  lk, auth, lives, findClass, canAccess: canAccessLive,
+  lk, auth, lives, io, findClass, canAccess: canAccessLive,
   viewerUserId: (live, sid) => (live.viewers.get(sid) || {}).userId,
   groupForUser: breakout.groupForUser,
 }));
 app.use(operations.createRouter({ auth, lives, lk, findClass, canAccess: canAccessLive, endLive, revokeUser, publicUser, notifyClass, checkpoint }));
+app.use(zoom.createRouter({ auth, userFromToken, io, lk, lives, findClass, canAccess: canAccessLive }));
+app.put('/api/admin/video/lives/:id', auth('admin'), async (req, res) => {
+  const c = findClass(req.params.id), live = lives.get(req.params.id), provider = req.body?.provider;
+  if (!c || !live) return res.status(404).json({ error: 'Buổi học đã kết thúc.' });
+  if (!videoProvider.PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Chỉ chọn Zoom hoặc LiveKit.' });
+  try {
+    const next = videoProvider.select(lk, c, lives, provider), old = live.video;
+    if (old?.provider === provider) return res.json({ ok: true });
+    await interact.setSpeaker(live, c.id, null);
+    if (lives.get(c.id) !== live || live.video !== old) return res.status(409).json({ error: 'Buổi học đã thay đổi. Hãy tải lại.' });
+    breakout.end(live, c.id, 'Admin chuyển dịch vụ video.');
+    if (old?.provider !== 'zoom') lk.endRooms(c.id, []);
+    live.video = next;
+    live.providerChanges = [...(live.providerChanges || []), { provider, at: Date.now() }];
+    checkpoint(); store.audit(req.user, 'video.live.switch', c.id, provider);
+    io.to('live:' + c.id).emit('video:changed', { provider }); notifyClass(c);
+    res.json({ ok: true });
+  } catch (e) { res.status(409).json({ error: e.message }); }
+});
 
 // ---------- Lớp học ----------
 app.get('/api/classes', auth(), (req, res) => {
@@ -205,13 +228,23 @@ app.get('/api/classes/:id', auth(), (req, res) => {
   if (!canAccessLive(req.user, c)) return res.status(403).json({ error: 'Bạn không thuộc lớp học này.' });
   const teacher = findUser(c.teacherId);
   const manager = c.teacherId === req.user.id || req.user.role === 'admin';
-  res.json({ class: { id: c.id, name: c.name, level: c.level, color: c.color, teacher: teacher && teacher.name, studentCount: c.studentIds.length, live: liveInfo(c.id), ...(manager ? { code: c.code } : {}) } });
+  res.json({ class: { id: c.id, name: c.name, level: c.level, color: c.color, teacher: teacher && teacher.name, studentCount: c.studentIds.length, maxStudents: capacity.limit(c), live: liveInfo(c.id), ...(manager ? { code: c.code } : {}) } });
 });
 
 const COLORS = ['violet', 'orange', 'teal', 'pink', 'blue'];
 
+app.get('/api/classes/:id/sessions/:sessionId/review', auth(), (req, res) => {
+  const c = findClass(req.params.id);
+  if (!canAccessLive(req.user, c)) return res.status(403).json({ error: 'Bạn không thuộc lớp học này.' });
+  const h = c.history.find(x => x.id === req.params.sessionId);
+  if (!h || !h.reviewLessons || !h.reviewLessons.length) return res.status(404).json({ error: 'Buổi học không có slide để xem lại.' });
+  res.json({ session: { title: h.title, startedAt: h.startedAt, lessons: h.reviewLessons } });
+});
+
 app.post('/api/classes', auth('teacher'), (req, res) => {
-  const { name, level, description, color } = req.body || {};
+  const { name, level, description, color, maxStudents } = req.body || {};
+  const limit = capacity.parse(maxStudents);
+  if (!limit) return res.status(400).json({ error: 'Sĩ số tối đa phải là số nguyên từ 1 đến 1000.' });
   if (!name) return res.status(400).json({ error: 'Vui lòng nhập tên lớp.' });
   const c = {
     id: store.id('c'),
@@ -221,7 +254,7 @@ app.post('/api/classes', auth('teacher'), (req, res) => {
     color: COLORS.includes(color) ? color : COLORS[db().classes.length % COLORS.length],
     code: store.classCode(),
     teacherId: req.user.id,
-    studentIds: [],
+    studentIds: [], maxStudents: limit,
     pendingIds: [],
     history: [],
     createdAt: Date.now(),
@@ -258,6 +291,7 @@ app.post('/api/classes/:id/students', auth('teacher'), (req, res) => {
   if (!s) return res.status(404).json({ error: 'Không tìm thấy học sinh với email này.' });
   if (s.role !== 'student') return res.status(400).json({ error: 'Tài khoản này không phải học sinh.' });
   if (c.studentIds.includes(s.id)) return res.status(400).json({ error: 'Học sinh đã có trong lớp.' });
+  if (c.studentIds.length >= capacity.limit(c)) return res.status(409).json({ error: 'Lớp đã đủ sĩ số tối đa.' });
   c.pendingIds = c.pendingIds.filter((x) => x !== s.id);
   c.studentIds.push(s.id);
   store.save();
@@ -283,7 +317,9 @@ app.post('/api/classes/:id/requests/:sid/:action', auth('teacher'), (req, res) =
   const c = ownClass(req, res);
   if (!c) return;
   const { sid, action } = req.params;
+  if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Thao tác không hợp lệ.' });
   if (!c.pendingIds.includes(sid)) return res.status(404).json({ error: 'Không có yêu cầu này.' });
+  if (action === 'approve' && !c.studentIds.includes(sid) && c.studentIds.length >= capacity.limit(c)) return res.status(409).json({ error: 'Lớp đã đủ sĩ số tối đa.' });
   c.pendingIds = c.pendingIds.filter((x) => x !== sid);
   if (action === 'approve' && !c.studentIds.includes(sid)) c.studentIds.push(sid);
   store.save();
@@ -318,8 +354,13 @@ app.post('/api/classes/:id/live', auth('teacher'), (req, res) => {
   const c = ownClass(req, res);
   if (!c) return;
   if (!lives.has(c.id)) {
+    let video;
+    try { video = videoProvider.select(lk, c, lives); }
+    catch (e) { return res.status(409).json({ error: e.message }); }
+    const setup = zoom.hostSetup(req.user, video);
+    if (!setup.canStart) return res.status(409).json({ error: setup.message, code: setup.code });
     const title = String((req.body || {}).title || '').trim() || 'Buổi học trực tiếp';
-    lives.set(c.id, { classId: c.id, title, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), attendance: {}, banned: new Set(), revealed: new Set(), scored: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map(), speaker: null, pad: null, pdf: null, breakout: null });
+    lives.set(c.id, { classId: c.id, title, video, startedAt: Date.now(), teacherSocket: null, viewers: new Map(), attendees: new Set(), attendance: {}, banned: new Set(), revealed: new Set(), scored: new Set(), peak: 0, word: null, lesson: null, slideIndex: 0, activity: null, scores: new Map(), speaker: null, pad: null, pdf: null, breakout: null });
     checkpoint();
     notifyClass(c);
   }
@@ -343,8 +384,10 @@ function endLive(c, reason) {
   for (const sid of [...live.viewers.keys()]) closeAttendance(live, sid);
   const groupIds = live.breakout ? live.breakout.groups.map((g) => g.id) : [];
   breakout.end(live, c.id, 'Buổi học đã kết thúc.');
-  lk.endRooms(c.id, groupIds); // ngắt mọi người khỏi phòng LiveKit
+  if (live.video?.provider !== 'zoom') lk.endRooms(c.id, groupIds);
   c.history.unshift({
+    id: store.id('session'), reviewLessons: (live.reviewLessons || []).filter(l => l.slides.length),
+    provider: live.video?.provider || (lk.enabled ? 'livekit' : 'p2p'),
     title: live.title,
     startedAt: live.startedAt,
     endedAt: Date.now(),
@@ -354,7 +397,6 @@ function endLive(c, reason) {
     scores: present.ranking(live),
     attendance: live.attendance || {}, pad: live.pad ? { prompt: live.pad.prompt, entries: [...live.pad.entries], featured: live.pad.featured } : null,
   });
-  c.history = c.history.slice(0, 50);
   store.save();
   io.to('live:' + c.id).emit('live:ended', { reason });
   io.in('live:' + c.id).socketsLeave('live:' + c.id);
@@ -367,7 +409,7 @@ function kickUserFromLive(classId, userId, reason, ban = true) {
   const live = lives.get(classId);
   if (!live) return;
   live.banned = live.banned || new Set(); if (ban) live.banned.add(userId);
-  lk.removeUser(classId, userId, live.breakout ? live.breakout.groups.map(g => g.id) : []);
+  if (live.video?.provider !== 'zoom') lk.removeUser(classId, userId, live.breakout ? live.breakout.groups.map(g => g.id) : []);
   for (const [sid, v] of live.viewers) {
     if (v.userId === userId) {
       io.to(sid).emit('kicked', { reason });
@@ -443,7 +485,8 @@ io.on('connection', (socket) => {
     if (!live) return reply({ error: 'Buổi học chưa bắt đầu hoặc đã kết thúc.' });
     if (live.banned && live.banned.has(user.id)) return reply({ error: 'Bạn đã bị mời rời buổi học này.' });
     if (user.role === 'assistant' || user.role === 'admin' && c.teacherId !== user.id) return reply({ error: 'Chỉ giáo viên phụ trách điều khiển phòng. Trợ giảng quản lý bài tập tại trang Học tập.' });
-    if (user.role === 'student' && ![...live.viewers.values()].some(v => v.userId === user.id) && live.viewers.size >= db().settings.limits.maxParticipants - 1) return reply({ error: 'Lớp đã đủ số người cho phép.' });
+    const maxParticipants = Math.min(db().settings.limits.maxParticipants, live.video?.provider === 'zoom' ? 100 : Infinity);
+    if (user.role === 'student' && ![...live.viewers.values()].some(v => v.userId === user.id) && live.viewers.size >= maxParticipants - 1) return reply({ error: 'Lớp đã đủ số người cho phép.' });
     if (socket.data.classId) leaveRoom(socket.data.classId === classId);
 
     socket.data.classId = classId;
@@ -502,7 +545,7 @@ io.on('connection', (socket) => {
   // Chuyển tiếp offer/answer/ICE giữa giáo viên và học sinh trong cùng phòng
   socket.on('signal', ({ to, data }) => {
     const live = lives.get(socket.data.classId);
-    if (!live) return;
+    if (!live || live.video?.provider === 'zoom') return;
     const allowed = ['teacher', 'admin'].includes(user.role) ? live.teacherSocket === socket.id && live.viewers.has(to) : to === live.teacherSocket && live.viewers.has(socket.id);
     if (allowed) io.to(to).emit('signal', { from: socket.id, data });
   });
@@ -562,7 +605,7 @@ io.on('connection', (socket) => {
     socket.data.classId = null;
     if (!live) return;
     socket.leave('live:' + classId);
-    if (!keepMedia) lk.removeUser(classId, user.id, live.breakout ? live.breakout.groups.map(g => g.id) : []);
+    if (!keepMedia && live.video?.provider !== 'zoom') lk.removeUser(classId, user.id, live.breakout ? live.breakout.groups.map(g => g.id) : []);
     if (live.teacherSocket === socket.id) {
       live.teacherSocket = null;
       interact.setSpeaker(live, classId, null);
@@ -583,5 +626,7 @@ function shutdown() { checkpoint(); store.flush(); server.close(() => process.ex
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 server.listen(PORT, () => {
   console.log(`EngLive đang chạy tại http://localhost:${PORT}`);
-  console.log(lk.enabled ? `Video: LiveKit (${lk.config.url})` : 'Video: WebRTC P2P (chưa cấu hình LiveKit)');
+  const todayProvider = videoProvider.provider(lk);
+  console.log(`Video cho buổi mở ngày ${videoProvider.day()}: ${todayProvider === 'zoom' ? 'Zoom Meeting SDK' : todayProvider === 'livekit' ? 'LiveKit' : 'WebRTC P2P'}`);
+  if (todayProvider === 'zoom') console.log(lk.enabled ? 'Dự phòng LiveKit: đã cấu hình.' : 'Dự phòng LiveKit: chưa cấu hình trong tiến trình này.');
 });

@@ -3,3 +3,4 @@ data/
 data-mock/
 .claude/
 tools/
+.test-tmp/
