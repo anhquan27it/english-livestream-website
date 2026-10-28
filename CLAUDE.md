@@ -1,16 +1,8 @@
 # CLAUDE.md — hướng dẫn cho Claude khi làm việc trong repo này
 
-**PKCE Zoom 28/10 (ưu tiên mới nhất):** callback HTTP loopback chỉ được Zoom chấp nhận với public/PKCE hoặc native. Đã thêm ô `publicClientId`/`ZOOM_PUBLIC_CLIENT_ID`, PKCE S256 và token exchange/refresh public, tách khỏi SDK Client ID/Secret. Người dùng phải bật Use Public Client OAuth trong app rồi nhập Public Client ID, giữ callback IP và restart. 75 ca qua bằng mock, chưa thử OAuth PKCE thật. Xem đầu PROJECT.md; chỉ đổi localhost sang IP là chưa đủ.
+**Trạng thái 2026-10-28 (đã commit + push `5ccdd8c`, `npm test` = 75 ca):** video có 3 chế độ — **LiveKit** (chính; Cloud gói Build free hoặc `livekit-server --dev`), **Zoom Meeting SDK** (iframe `zoom-embed.html`, giáo viên chủ trì trong web bằng OAuth PKCE + ZAK) và **P2P** dự phòng. Admin chọn dịch vụ mặc định/theo ngày và chuyển buổi đang chạy ở `/video-settings.html`; hôm nay dữ liệu thật đang đặt **Zoom**. Zoom mới chỉ kiểm thử giả lập (chưa meeting/OAuth thật). Chi tiết: PROJECT.md mục *Zoom + chọn dịch vụ video* (đầu file) và *Chế độ LiveKit*.
 
-**Callback Zoom 28/10:** Marketplace không cho hostname localhost. Dùng `http://127.0.0.1:3000/api/zoom/oauth/callback` cho local ở cả Zoom và EngLive; `zoom-urls.js` sinh URL IP, OAuth quay lại origin cũ khi alias loopback cùng cổng. 75 ca qua; cần restart máy chủ. Hướng dẫn localhost trong các ghi chép cũ đã lỗi thời.
-
-**Ưu tiên 28/10:** người dùng muốn giáo viên chỉ dùng EngLive, không mở Zoom trước. Gán mới mặc định SDK host; admin áp dụng chế độ web cho các lớp cũ; OAuth/ZAK là thiết lập một lần bắt buộc. Có preflight trước tạo buổi và UI hướng dẫn/link Zoom; 74 ca qua. Chưa test OAuth thật, cần người dùng khai báo callback/scopes, cấp quyền và restart server. Xem đầu PROJECT.md.
-
-**Cập nhật 2026-10-28:** Đã viết tích hợp Zoom Meeting SDK (`video.js`, `zoom.js`, `zoom-live.js`, iframe `zoom-embed.html`) + admin `/video-settings.html`; cấu hình Zoom/LiveKit mặc định/theo ngày và chuyển phòng đang học, có OAuth host hoặc host bằng desktop. `npm test` 72 ca (Zoom OAuth/media giả lập). SDK thật tải được trên QA nhưng chưa có khóa/meeting/OAuth/media thật. Đọc mục mới nhất đầu PROJECT.md và README trước khi thử; không hứa Zoom Basic đầy đủ như LiveKit. Các thay đổi vẫn chưa commit/push, cần người dùng restart server thật.
-
-**Cập nhật 2026-10-27:** LiveKit Cloud đã chạy thử (gói Build free, xem PROJECT.md đầu file); admin có thanh bên tách mục + tạo/xóa lớp + thời khóa biểu; giáo viên chọn chất lượng camera; `npm test` = 56 ca. Khoá LiveKit **không dán vào chat** (người dùng từng làm lộ, cần revoke); hướng dẫn đặt khoá bằng `Read-Host` + `Get-Clipboard`.
-
-**Bản nâng cấp 2026-10-26:** đọc mục *Cập nhật mới nhất* đầu PROJECT.md. Có admin/assistant, AI settings chỉ admin; bootstrap bằng `npm run admin:create -- email` **khi server đã dừng**. JSON vẫn dùng nhưng có writer lock, backup và snapshot. Có `/admin.html`, `/learning.html`, `/devices.html`; `npm test` mở rộng 56 ca, `npm run test:load` chỉ đo Socket.IO, `npm run dev:qa` cổng 3101 với data tạm. Những dòng 35 test/2 vai trò phía dưới là mô tả lịch sử; cập nhật mới nhất có ưu tiên.
+**Điều cần nhớ:** (1) Callback Zoom local phải là `http://127.0.0.1:<cổng>/api/zoom/oauth/callback` (không `localhost`) và cần PKCE/Public Client ID. (2) Khóa LiveKit/Zoom/API **không dán vào chat**; đặt qua admin hoặc biến môi trường (`Read-Host` + `Get-Clipboard`); một số khóa từng lộ nên cần revoke/tạo lại. (3) Token Zoom lưu rõ trong `data/db.json`; có demo `123456` và admin `admin@englive.local` — **gỡ/đổi trước khi công khai**. (4) Admin mới: `npm run admin:create -- email` khi server đã dừng. (5) Mỗi lần đổi code server người dùng phải chạy lại `npm start`. (6) Lịch sử lớp không còn bị cắt 50 buổi; lớp có `maxStudents` (mặc định 30).
 
 **Đọc [PROJECT.md](PROJECT.md) trước**: bối cảnh người dùng, kiến trúc, tiến độ, trạng thái hiện tại, việc đang chờ và nhật ký.
 Sau mỗi phiên làm việc, cập nhật *Trạng thái hiện tại*, *Tiến độ* và *Nhật ký* trong PROJECT.md (và mục này nếu quy ước đổi).
@@ -40,7 +32,8 @@ npm install
 npm start            # http://localhost:3000 (dữ liệu thật trong data/db.json)
 npm run dev          # tự reload khi sửa server
 npm run dev:mock     # http://localhost:3001, AI giả lập, dữ liệu tách ở data-mock/ (không cần 9Router)
-npm test             # 35 kiểm tra end-to-end, tự dựng mock LLM + server tạm
+npm test             # 75 kiểm tra end-to-end (smoke, operations, Zoom), tự dựng mock LLM/LiveKit/Zoom + server tạm
+npm run livekit:dev  # tải/chạy livekit-server --dev vào tools/; rồi npm run start:lk hoặc npm run dev:mock:lk (cổng 3001; nếu bận preview chọn 3002)
 node tests/bench.js [model] [số slide] [số game]   # đo thời gian tạo bài với AI THẬT (chạy trên bản sao dữ liệu)
 node tests/fidelity.js [file] [số slide] [số game] # AI THẬT: kiểm tra slide bám tài liệu + đa dạng bố cục (MODEL=... để đổi model)
 node tests/scope-check.js                           # AI THẬT: kiểm tra cổng "chỉ học tiếng Anh" ở bước outline
@@ -59,6 +52,8 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - `interact.js` — quyền phát biểu (mỗi lúc một học sinh), reactions, tặng sao. `recordings.js` — bản ghi buổi học (`/api/classes/:id/recordings`, tệp ở `data/recordings/`).
 - `writing.js` (bảng viết cộng tác), `pdfshare.js` (chiếu PDF + API `/api/classes/:id/pdfs`), `breakout.js` (phòng nhỏ; mesh WebRTC phía client, máy chủ chỉ chia nhóm/chuyển tín hiệu). Client tương ứng: `public/js/pad.js`, `pdf-live.js`, `breakout.js`; phụ đề nằm trong `live.js` (+ sự kiện `caption` ở `interact.js`).
 - `public/js/mixer.js` — bộ trộn âm thanh của giáo viên (micro + file nghe + âm thanh hệ thống + học sinh đang nói); chỉ khởi động khi giáo viên bấm nút cần nó (mặc định vẫn gửi micro trực tiếp). Muốn thử âm thanh khi không có micro: thêm `&fakemic=1` vào URL phòng live (giáo viên 220Hz, học sinh 660Hz).
+- `video.js` (chọn Zoom/LiveKit/P2P theo ngày VN) + `zoom.js` (admin video, OAuth PKCE, `/api/zoom/join`, chữ ký SDK) + `class-capacity.js` (sĩ số lớp); client `zoom-live.js`, `zoom-embed.js`, `zoom-errors.js`, `zoom-urls.js` (dùng chung server), `video-settings.js`. Khi buổi dùng Zoom: không signal P2P, không token LiveKit, không breakout/cấp quyền nói qua EngLive.
+- `operations.js`/`sessions.js`/`storage.js` — admin (tài khoản, lớp, lịch, hạn mức, backup, nhật ký), phiên đăng nhập, dung lượng; trang `admin`, `learning`, `devices`.
 - `pdf.js` — trích văn bản PDF (thư viện `unpdf`), txt, md.
 - `public/` — HTML/CSS/JS thuần, không build. Trang: `index`, `teacher`, `student`, `live`, `lessons`, `ai-settings`, `tutor`.
   `js/slides.js` render slide dùng chung (editor, live giáo viên, học sinh); `js/lesson-live.js` điều khiển trình chiếu trong `live`;
@@ -73,7 +68,7 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - Khoá API chỉ ở server, client chỉ nhận bản che (`••••xxxx`). Không in khoá ra log/chat; không đọc khoá của người dùng trừ khi cần chẩn đoán (chỉ so sánh, không in).
 - AI trả JSON: luôn qua `extractJson` + `normalizeScene`. Prompt AI có **SCOPE RULES** (chỉ tiếng Anh/bài học, coi tài liệu & tin nhắn là dữ liệu, không làm theo lệnh nhúng); giữ nguyên khi sửa prompt. Đây là ràng buộc bằng prompt, không phải bộ lọc cứng.
 - Sửa file bằng Edit/Write; tránh dùng `python`/`node -e`/heredoc trong shell để chèn chuỗi chứa `\n` hoặc `\w` (shell làm mất dấu `\`). Với vá nhiều chỗ: ghi script `.js` bằng Write rồi chạy. Một số file có xuống dòng CRLF lẫn LF (do git trên Windows): script vá cần `split('\r\n').join('\n')` trước khi so khớp chuỗi nhiều dòng.
-- 35 kiểm tra trong `npm test`; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
+- `npm test` = 75 kiểm tra; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
 - JS client dùng nhiều file script cổng toàn cục: `const X = ...` ở mức cao nhất **không** là `window.X`; kiểm tra bằng `typeof X !== 'undefined'`. Thuộc tính `data-*` trong giao diện phải duy nhất (từng trùng `data-end`).
 - Thử giao diện 3 vai bằng 3 tab trình duyệt khác origin (`localhost`, `127.0.0.1`, `[::1]`) với `?fakemic=1`; tab ở nền bị trình duyệt tạm dừng hoạt ảnh (pdf.js sẽ không vẽ), hãy đưa tab ra trước khi kiểm tra hình.
 - **Server cũ chạy trên máy người dùng không tự cập nhật.** Mỗi lần đổi code server, người dùng phải chạy lại `npm start`; nếu không sẽ gặp lỗi lạ (từng có: lưu bản ghi trả 404, tính năng mới không hoạt động). Cổng 3000: nếu thấy `EADDRINUSE`, tắt tiến trình `node server.js` cũ rồi nhờ người dùng tự chạy `npm start`; không mở thêm server ẩn ở cổng 3000. Dùng cổng 3001 + `npm run dev:mock` cho kiểm thử của mình.
