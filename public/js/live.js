@@ -218,6 +218,16 @@ function qualityModal() {
   m.querySelectorAll('input[name="camq"]').forEach((r) => (r.onchange = () => { setCamQuality(r.value); m.close && m.close(); }));
 }
 
+// Lý do cụ thể khi getUserMedia lỗi (trước đây mọi lỗi đều bị báo là "không tìm thấy thiết bị")
+function mediaErrorText(e, what) {
+  const n = (e && e.name) || '';
+  if (!navigator.mediaDevices) return 'Trình duyệt chỉ cho dùng ' + what + ' ở trang HTTPS hoặc localhost. Hãy mở bằng địa chỉ https:// (ví dụ link Cloudflare).';
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Trình duyệt đang chặn ' + what + '. Bấm biểu tượng ổ khóa cạnh địa chỉ → cho phép camera/micro (Brave: tắt Shields cho trang này), rồi tải lại trang.';
+  if (n === 'NotReadableError' || n === 'AbortError') return what + ' đang được ứng dụng khác dùng (Zoom, Teams, tab khác…). Hãy tắt chúng rồi tải lại trang.';
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'Không tìm thấy ' + what + (n === 'OverconstrainedError' ? ' đã chọn ở trang Kiểm tra thiết bị. Hãy chọn lại thiết bị.' : '. Kiểm tra thiết bị đã cắm và được bật trong hệ điều hành.');
+  return 'Không mở được ' + what + (e && e.message ? ': ' + e.message : '.');
+}
+
 async function startMedia() {
   if (FAKE_MIC) {
     usingFallback = true;
@@ -229,13 +239,17 @@ async function startMedia() {
   }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: CAM_QUALITY[camQualityKey()].w }, height: { ideal: CAM_QUALITY[camQualityKey()].h }, frameRate: { ideal: CAM_QUALITY[camQualityKey()].fps }, ...devicePreferences('camera') }, audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } });
-  } catch {
-    // Không có camera: dùng micro (nếu có) + màn hình chờ vẽ bằng canvas
-    usingFallback = true;
-    let audio = [];
-    try { audio = (await navigator.mediaDevices.getUserMedia({ audio: true })).getAudioTracks(); } catch {}
-    camStream = new MediaStream([...audio, canvasTrack()]);
-    toast(audio.length ? 'Không tìm thấy camera — đang phát màn hình chờ kèm micro.' : 'Không tìm thấy camera/micro — hãy dùng “Chia sẻ màn hình”.', 'error');
+  } catch (e) {
+    // Một thiết bị lỗi không được kéo theo thiết bị kia: thử riêng micro và camera, báo đúng lý do từng cái
+    const gum = navigator.mediaDevices ? (c) => navigator.mediaDevices.getUserMedia(c) : () => Promise.reject(e);
+    let audio = [], video = [], aErr = e, vErr = e;
+    try { audio = (await gum({ audio: { echoCancellation: true, noiseSuppression: true, ...devicePreferences('microphone') } })).getAudioTracks(); } catch (x) { aErr = x; }
+    if (!audio.length) { try { audio = (await gum({ audio: true })).getAudioTracks(); } catch (x) { aErr = x; } }
+    try { video = (await gum({ video: true })).getVideoTracks(); } catch (x) { vErr = x; }
+    usingFallback = !video.length;
+    camStream = new MediaStream([...audio, video[0] || canvasTrack()]);
+    if (!video.length) toast(mediaErrorText(vErr, 'camera') + (audio.length ? ' Đang phát màn hình chờ kèm micro.' : ''), 'error');
+    if (!audio.length) toast(mediaErrorText(aErr, 'micro'), 'error');
   }
   camStream.getTracks().forEach((t) => outStream.addTrack(t));
   showLocalPreview();
@@ -775,8 +789,8 @@ async function startMic() {
     else if (audioSender) await audioSender.replaceTrack(track);
     speaking = true;
     toast('🎤 Giáo viên cho phép bạn phát biểu — hãy nói nhé!', 'success');
-  } catch {
-    toast('Không bật được micro. Hãy cho phép trình duyệt dùng micro rồi nhờ giáo viên mời lại.', 'error');
+  } catch (e) {
+    toast(mediaErrorText(e, 'micro') + ' Sau đó nhờ giáo viên mời phát biểu lại.', 'error');
   }
   renderControls();
 }
@@ -793,7 +807,7 @@ async function toggleMyCam() {
     toast('📹 Camera của bạn đang hiển thị cho cả lớp', 'success');
   } catch (e) {
     stopMyCam();
-    toast('Không bật được camera: ' + (e && e.message ? e.message : 'hãy cho phép trình duyệt dùng camera.'), 'error');
+    toast(e && /quyền phát/.test(e.message || '') ? e.message : mediaErrorText(e, 'camera'), 'error');
   }
   renderControls();
 }
