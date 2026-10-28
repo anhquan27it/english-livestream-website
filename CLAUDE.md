@@ -4,6 +4,8 @@
 
 **Điều cần nhớ:** (1) Callback Zoom local phải là `http://127.0.0.1:<cổng>/api/zoom/oauth/callback` (không `localhost`) và cần PKCE/Public Client ID. (2) Khóa LiveKit/Zoom/API **không dán vào chat**; đặt qua admin hoặc biến môi trường (`Read-Host` + `Get-Clipboard`); một số khóa từng lộ nên cần revoke/tạo lại. (3) Token Zoom lưu rõ trong `data/db.json`; có demo `123456` và admin `admin@englive.local` — **gỡ/đổi trước khi công khai**. (4) Admin mới: `npm run admin:create -- email` khi server đã dừng. (5) Mỗi lần đổi code server người dùng phải chạy lại `npm start`. (6) Lịch sử lớp không còn bị cắt 50 buổi; lớp có `maxStudents` (mặc định 30).
 
+**Người mới pull về: làm theo mục *Bắt đầu nhanh* ở đầu [README.md](README.md).**
+
 **Đọc [PROJECT.md](PROJECT.md) trước**: bối cảnh người dùng, kiến trúc, tiến độ, trạng thái hiện tại, việc đang chờ và nhật ký.
 Sau mỗi phiên làm việc, cập nhật *Trạng thái hiện tại*, *Tiến độ* và *Nhật ký* trong PROJECT.md (và mục này nếu quy ước đổi).
 

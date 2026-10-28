@@ -1,5 +1,38 @@
 # EngLive — Web học tiếng Anh livestream
 
+Lớp học trực tiếp 1 giáo viên → nhiều học sinh (tối đa 30 học sinh/lớp theo mặc định), có admin/trợ giảng. Giáo viên soạn slide + trò chơi bằng AI từ PDF, trình chiếu trong buổi live; học sinh tương tác và hỏi AI. Video qua **LiveKit** (chính), **Zoom Meeting SDK** (tùy chọn) hoặc WebRTC P2P (dự phòng).
+
+## Bắt đầu nhanh (cho người mới pull về)
+
+Cần: [Node.js](https://nodejs.org/) **18 trở lên** (đã chạy với Node 24), Git, trình duyệt Chrome/Edge/Brave. Không cần database; dữ liệu lưu ở `data/db.json`.
+
+```bash
+git clone https://github.com/anhquan27it/english-livestream-website.git
+cd english-livestream-website
+npm install
+npm start          # http://localhost:3000
+```
+
+Lần đầu chạy tự tạo dữ liệu mẫu. Đăng nhập bằng tài khoản mẫu (mật khẩu `123456`): `teacher@demo.com`, `student1@demo.com`, `student2@demo.com`. Muốn thử hai vai trên cùng máy: giáo viên ở `http://localhost:3000`, học sinh ở `http://127.0.0.1:3000` (hoặc cửa sổ ẩn danh).
+
+**Thử nhanh không cần cấu hình gì** (AI giả lập, dữ liệu tách riêng ở `data-mock/`): `npm run dev:mock` → http://localhost:3001.
+
+Các thành phần tùy chọn (không bắt buộc để chạy):
+
+| Muốn có | Làm gì |
+| --- | --- |
+| **Tạo bài bằng AI thật** | Chạy một dịch vụ tương thích OpenAI (nhóm đang dùng 9Router (`http://localhost:20128/v1`) với model `ag/gemini-3.8-flash-high`) hoặc nhà cung cấp khác. Đăng nhập **admin** → *Cài đặt AI* → nhập Base URL, API key, model → *Kiểm tra kết nối*. Không có AI thì phần soạn bài/chat AI báo lỗi, phần còn lại vẫn chạy. Hoặc đặt biến `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`. |
+| **Tài khoản admin** | Dừng server (Ctrl+C) → `npm run admin:create -- admin@englive.local` → lưu mật khẩu ngẫu nhiên in ra → `npm start` → vào `/admin.html`. Bản mới clone **chưa có** admin; nút "Admin" demo ở trang chủ chỉ hoạt động sau khi bạn tạo tài khoản này. |
+| **Video ổn định (LiveKit)** | Không cấu hình gì thì tự dùng WebRTC P2P (đủ để thử 2–3 máy cùng mạng). Cách dễ nhất trên Windows: `npm run livekit:dev` (tải `livekit-server --dev` vào `tools/`) rồi ở cửa sổ khác `npm run start:lk`. Dùng LiveKit Cloud: đặt `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` trong cửa sổ chạy `npm start` (xem mục *LiveKit Cloud* bên dưới). `localhost:7880` chỉ dùng được cho máy chạy server. |
+| **Zoom Meeting SDK** | Tùy chọn, cần tài khoản/app Zoom riêng: xem mục *Zoom Meeting SDK + LiveKit* bên dưới. Admin chọn dịch vụ mỗi ngày ở `/video-settings.html`. |
+| **Cho bạn bè ở máy khác vào thử** | `cloudflared tunnel --url http://localhost:3000` (xem mục *Cho bạn bè test qua link tạm*). Camera/micro cần **HTTPS hoặc localhost** — mở bằng `http://IP-LAN` trình duyệt sẽ chặn. |
+
+Lệnh thường dùng: `npm test` (75 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
+
+**Lưu ý bảo mật:** `data/` (chứa API key AI, token Zoom, mật khẩu băm, bản ghi) và `data-mock/` **không** được commit — giữ nguyên như vậy. Không dán khóa LiveKit/Zoom/AI vào chat hoặc commit. Trước khi mở cho người lạ: đổi/xóa tài khoản mẫu `123456`, đổi mật khẩu admin, tạo lại mọi khóa từng bị lộ. Biến môi trường khác: `PORT`, `DATA_DIR`, `AI_CONCURRENCY`, `LIVEKIT_PUBLIC_URL`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_PUBLIC_CLIENT_ID`, `ZOOM_REDIRECT_URI`.
+
+Tài liệu khác: [PROJECT.md](PROJECT.md) (kiến trúc, tiến độ, nhật ký, việc đang chờ) và [CLAUDE.md](CLAUDE.md) (quy ước cho Claude Code khi làm việc trong repo).
+
 ## Zoom Meeting SDK + LiveKit (2026-10-28)
 
 **Callback HTTP local cần PKCE:** Zoom không cho luồng confidential OAuth thông thường quay về `http://127.0.0.1`. Trong General App → Basic information → App credentials, bật **Use Public Client OAuth**, lấy **Public Client ID** và nhập vào ô riêng trong admin EngLive. Giữ nguyên Client ID/Secret Meeting SDK. EngLive dùng Public Client ID + PKCE S256 để xin quyền, đổi code và refresh token; SDK vẫn ký bằng Client ID/Secret gốc. Phải restart server sau cập nhật. Khi chưa nhập Public Client ID, EngLive chặn bắt đầu OAuth HTTP thay vì đưa sang trang Zoom báo Invalid redirect. Với callback HTTPS, có thể giữ luồng confidential Client ID/Secret. Xem [tài liệu loopback/PKCE của Zoom](https://developers.zoom.us/docs/integrations/oauth/#using-a-loopback-redirect-uri).
@@ -60,22 +93,16 @@ Khôi phục: dừng server, chạy `npm run backup:restore -- db-<tên-bản-sa
 
 ### Kiểm tra bản nâng cấp
 
-- `npm test`: 55 kiểm tra với dữ liệu tạm, mock AI và mock API LiveKit, gồm các ca phân quyền, điểm, ẩn đáp án, restart và phục hồi JSON hỏng.
+- `npm test`: 75 kiểm tra với dữ liệu tạm, mock AI và mock API LiveKit, gồm các ca phân quyền, điểm, ẩn đáp án, restart và phục hồi JSON hỏng.
 - `npm run test:load`: thử Socket.IO ở 5/20/50/99 học sinh + giáo viên; không đo khả năng truyền video LiveKit hay chi phí Cloud.
 - `npm run dev:qa`: server cổng 3101, dữ liệu tạm, admin riêng `admin@test.com` / `admin-test-password` và AI giả, không kết nối LiveKit Cloud. Teacher mẫu vẫn là giáo viên. Không dùng thay server thật.
 - Đã duyệt admin/học tập bằng trình duyệt, tạo–nộp bài ở hai phiên, kiểm tra 820/1100/1400 px và 390 px. Camera/mic thật, LiveKit Cloud hai mạng, ghi hình tab và tải video đông người vẫn cần thử thực tế.
 
-Lớp học trực tiếp 1 giáo viên → nhiều học sinh, có phân quyền **Giáo viên** / **Học sinh**.
-Chỉ học sinh đã ở trong lớp của giáo viên mới xem được livestream của lớp đó.
+Phân quyền **Giáo viên** / **Học sinh** / Trợ giảng / Admin. Chỉ học sinh đã ở trong lớp của giáo viên mới xem được livestream của lớp đó.
 
-## Chạy
+## Chạy (tóm tắt)
 
-```bash
-npm install
-npm start
-```
-
-Mở http://localhost:3000
+Xem *Bắt đầu nhanh* ở đầu tệp. `npm install` → `npm start` → http://localhost:3000.
 
 Tài khoản mẫu (mật khẩu `123456`):
 
@@ -167,7 +194,7 @@ Muốn chạy lâu dài, công khai: thuê VPS + HTTPS (Caddy/Nginx) + tên mi�
 
 ## Kỹ thuật
 
-- Node.js + Express + Socket.IO (signaling), WebRTC peer-to-peer (giáo viên gửi tới từng học sinh).
+- Node.js + Express + Socket.IO (kênh điều khiển, chấm điểm, quyền), video qua LiveKit (SFU) / Zoom Meeting SDK / WebRTC P2P dự phòng.
 - Dữ liệu lưu ở `data/db.json` (xoá file này để tạo lại dữ liệu mẫu), gồm cả bài giảng, cài đặt AI (có API key) và lịch sử chat AI.
 - Camera/micro cần `localhost` hoặc **HTTPS** khi triển khai thật.
 - Mô hình P2P phù hợp lớp nhỏ (~10–20 học sinh). Lớp đông hoặc học sinh ở mạng khác nhau sau NAT chặt
