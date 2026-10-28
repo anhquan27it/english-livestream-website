@@ -74,7 +74,7 @@ async function init() {
   catch (e) { return showState('🔌', 'Chưa đọc được cấu hình video', e.message, true); }
   if (selectedProvider === 'livekit' && !LK) return showState('🔌', 'Chưa kết nối được LiveKit', 'Admin cần kiểm tra cấu hình LiveKit của máy chủ.', true);
   $('liveSub').textContent += ZOOM ? ' · Zoom Meeting' : LK ? ' · ' + LiveKitLive.label : ' · P2P';
-  if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; }
+  if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; setZoomLayout(savedZoomLayout()); }
   LessonLive.init({
     isTeacher, socket: null, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel'),
     onChange: () => aiChat && aiChat.reload(),
@@ -226,6 +226,18 @@ function mediaErrorText(e, what) {
   if (n === 'NotReadableError' || n === 'AbortError') return what + ' đang được ứng dụng khác dùng (Zoom, Teams, tab khác…). Hãy tắt chúng rồi tải lại trang.';
   if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'Không tìm thấy ' + what + (n === 'OverconstrainedError' ? ' đã chọn ở trang Kiểm tra thiết bị. Hãy chọn lại thiết bị.' : '. Kiểm tra thiết bị đã cắm và được bật trong hệ điều hành.');
   return 'Không mở được ' + what + (e && e.message ? ': ' + e.message : '.');
+}
+
+// Bố cục slide + Zoom: slide lớn (Zoom thu nhỏ ở góc) → Zoom lớn (slide thu nhỏ) → chia đôi; nhớ lựa chọn
+const ZOOM_LAYOUTS = ['pip', 'zoom', 'split'], ZOOM_LAYOUT_LABEL = { pip: 'Slide lớn', zoom: 'Zoom lớn', split: 'Chia đôi' };
+function savedZoomLayout() { try { const k = localStorage.getItem('englive_zoom_layout'); return ZOOM_LAYOUTS.includes(k) ? k : 'pip'; } catch { return 'pip'; } }
+function setZoomLayout(k) {
+  $('stage').dataset.zl = k;
+  try { localStorage.setItem('englive_zoom_layout', k); } catch { /* chế độ riêng tư */ }
+  $('swapBtn').title = 'Đang: ' + ZOOM_LAYOUT_LABEL[k] + ' — bấm để đổi cách hiển thị slide và Zoom';
+  $('swapBtn').innerHTML = '<i data-lucide="layout-dashboard"></i> ' + ZOOM_LAYOUT_LABEL[k];
+  icons();
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50); // slide vẽ lại theo khung mới
 }
 
 async function startMedia() {
@@ -484,7 +496,7 @@ function setupUi() {
     Object.entries(panels).forEach(([k, id]) => ($(id).hidden = b.dataset.panel !== k));
     $('chatBox').hidden = b.dataset.panel !== 'chat';
   }));
-  $('swapBtn').onclick = () => $('stage').classList.toggle('swap');
+  $('swapBtn').onclick = () => { if (ZOOM) setZoomLayout(ZOOM_LAYOUTS[(ZOOM_LAYOUTS.indexOf($('stage').dataset.zl) + 1) % ZOOM_LAYOUTS.length]); else $('stage').classList.toggle('swap'); };
   addChat({ system: true, text: isTeacher ? 'Bạn đang ở phòng livestream. Chỉ học sinh trong lớp mới xem được.' : 'Welcome to class! Hãy dùng tiếng Anh khi chat nhé 😊' });
   renderControls();
   renderPeople();
