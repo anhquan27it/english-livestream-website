@@ -185,6 +185,8 @@ lessons.recoverJobs();
 app.use(lessons.createRouter({ auth, findClass }));
 app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive }));
 app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
+const listening = require('./listening').init({ io, lives, auth, findClass, canAccess: canAccessLive });
+app.use(listening.router);
 const pdfshare = pdfshareMod.init({ io, lives, auth, findClass, canAccess: canAccessLive, present });
 app.use(pdfshare.router);
 app.use(livekitMod.createRouter({
@@ -398,6 +400,7 @@ function endLive(c, reason) {
     attendance: live.attendance || {}, pad: live.pad ? { prompt: live.pad.prompt, entries: [...live.pad.entries], featured: live.pad.featured } : null,
   });
   store.save();
+  listening.drop(live); // xóa file nghe của buổi
   io.to('live:' + c.id).emit('live:ended', { reason });
   io.in('live:' + c.id).socketsLeave('live:' + c.id);
   lives.delete(c.id);
@@ -507,7 +510,7 @@ io.on('connection', (socket) => {
         lesson: present.stateFor(live, { teacher: true }),
         speaker: interact.speakerInfo(live),
         pad: writing.stateFor(live, { teacher: true }),
-        pdf: live.pdf,
+        pdf: live.pdf, listen: listening.stateFor(live),
         breakout: breakout.teacherState(live),
         viewers: [...live.viewers].map(([sid, v]) => ({ socketId: sid, ...v })),
       });
@@ -532,7 +535,7 @@ io.on('connection', (socket) => {
     socket.to('live:' + classId).emit('chat', { system: true, text: `${user.name} đã tham gia lớp học`, at: Date.now() });
     notifyClass(c);
     const group = breakout.rejoin(live, socket.id, user.id);
-    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }), speaker: interact.speakerInfo(live), pad: writing.stateFor(live, { userId: user.id }), pdf: live.pdf, breakout: group });
+    reply({ ok: true, live: liveInfo(classId), word: live.word, teacherOnline: !!live.teacherSocket, lesson: present.stateFor(live, { userId: user.id }), speaker: interact.speakerInfo(live), pad: writing.stateFor(live, { userId: user.id }), pdf: live.pdf, listen: listening.stateFor(live), breakout: group });
     if (group) for (const m of group.members) if (m.socketId !== socket.id) io.to(m.socketId).emit('breakout:member-joined', { socketId: socket.id, name: user.name });
   });
 
@@ -540,6 +543,7 @@ io.on('connection', (socket) => {
   interact.attach(socket);
   writing.attach(socket);
   pdfshare.attach(socket);
+  listening.attach(socket);
   breakout.attach(socket);
 
   // Chuyển tiếp offer/answer/ICE giữa giáo viên và học sinh trong cùng phòng

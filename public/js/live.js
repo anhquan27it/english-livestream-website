@@ -106,6 +106,7 @@ async function init() {
   socket.on('lesson:state', (st) => LessonLive.apply(st));
   socket.on('speaker', onSpeaker);
   socket.on('caption', showCaption);
+  if (!isTeacher) socket.on('listen:state', applyListen); // file nghe đồng bộ (chế độ Zoom)
   socket.on('reaction', showReaction);
 
   if (isTeacher) {
@@ -160,6 +161,7 @@ function joinRoom() {
     LessonLive.apply(res.lesson);
     onSpeaker(res.speaker || null);
     PdfLive.apply(res.pdf || null);
+    if (!isTeacher) applyListen(res.listen || null);
     PadLive.apply(res.pad || null);
     if (!isTeacher && LK) connectLiveKitStudent();
     if (ZOOM) {
@@ -601,14 +603,14 @@ function renderZoomControls() {
   const zl = $('stage').dataset.zl || 'split';
   box.innerHTML = ctrl('zReconnect', 'video', 'Kết nối Zoom') + SEP +
     ctrl('zLayoutSplit', 'columns-2', 'Bố cục: Slide + Zoom cân bằng (kéo thanh giữa để đổi tỉ lệ)', zl === 'split' ? 'on' : '') + ctrl('zLayoutPip', 'picture-in-picture-2', 'Bố cục: Slide lớn, Zoom thu nhỏ', zl === 'pip' ? 'on' : '') + ctrl('zLayoutZoom', 'monitor-play', 'Bố cục: Zoom / chia sẻ màn hình lớn', zl === 'zoom' ? 'on' : '') + SEP +
-    (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + (speaking ? ctrl('zSpeak', 'mic', 'Bạn được mời phát biểu — bật micro trong Zoom', 'on') : '') + ctrl('zReact', 'smile', 'Cảm xúc') + ctrl('zCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '')) + SEP +
+    (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zListen', 'headphones', 'Phát file nghe (đồng bộ cho cả lớp)', zListen ? 'on' : '') + ctrl('zCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + (speaking ? ctrl('zSpeak', 'mic', 'Bạn được mời phát biểu — bật micro trong Zoom', 'on') : '') + ctrl('zReact', 'smile', 'Cảm xúc') + (lAudio ? '<input type="range" id="zVol" class="vol-range" min="0" max="100" value="' + Math.round(soundVolume * 100) + '" aria-label="Âm lượng file nghe" title="Âm lượng file nghe">' : '') + ctrl('zCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '')) + SEP +
     ctrl('zFull', 'maximize', 'Toàn màn hình') + ctrl('zLeave', isTeacher ? 'square' : 'log-out', isTeacher ? 'Kết thúc buổi học' : 'Rời lớp', 'danger');
   $('zReconnect').onclick = ZoomLive.retry;
   $('zLayoutSplit').onclick = () => setZoomLayout('split'); $('zLayoutPip').onclick = () => setZoomLayout('pip'); $('zLayoutZoom').onclick = () => setZoomLayout('zoom');
   $('zFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {});
   $('zLeave').onclick = isTeacher ? endLive : leave;
-  if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zCap').onclick = toggleCaptions; $('zRecord').onclick = toggleZoomRecord; }
-  else { $('zHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); }; $('zReact').onclick = reactPicker; $('zCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); }; }
+  if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zListen').onclick = zoomListenModal; $('zCap').onclick = toggleCaptions; $('zRecord').onclick = toggleZoomRecord; }
+  else { if ($('zVol')) $('zVol').oninput = (e) => setVolume(e.target.value / 100); $('zHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); }; $('zReact').onclick = reactPicker; $('zCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); }; }
   icons();
 }
 
@@ -949,6 +951,81 @@ function stopMic(reason) {
 }
 
 // File nghe: phát trong trình duyệt của giáo viên, trộn vào luồng nên cả lớp nghe cùng lúc với âm thanh gốc
+// ---------------- File nghe đồng bộ (Zoom không trộn được âm thanh vào luồng) ----------------
+// Giáo viên tải file lên máy chủ và điều khiển; mỗi học sinh tự phát file trên máy mình và bám theo vị trí giáo viên.
+let zListen = null; // { el, bar } phía giáo viên
+function zoomListenModal() {
+  const m = openModal(`<h3>Phát file nghe 🎧</h3>
+    <p class="sub">Chọn file âm thanh (mp3, wav, m4a, ogg, flac, mp4…, tối đa 30 MB). File được gửi tới máy từng học sinh và phát đồng bộ với bạn: bạn phát/tạm dừng/tua thì cả lớp theo. <b>Hãy tắt mic Zoom của bạn khi phát</b> để tránh vọng, vì học sinh nghe file trực tiếp trên máy họ.</p>
+    <div class="field"><input type="file" id="listenFile" accept="audio/*,video/mp4" class="input" /></div>
+    <div class="modal-actions"><button class="btn btn-outline" data-close>Đóng</button></div>`);
+  m.querySelector('#listenFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 30 * 1048576) return toast('File quá lớn (tối đa 30 MB).', 'error');
+    e.target.disabled = true;
+    toast('Đang gửi file nghe tới lớp…');
+    try {
+      const res = await fetch(`/api/classes/${classId}/listening`, { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token, 'X-Filename': encodeURIComponent(f.name) }, body: f });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Không gửi được file.');
+    } catch (err) { m.close(); return toast(err.message, 'error'); }
+    m.close();
+    openZoomListenBar(f);
+  };
+}
+
+function openZoomListenBar(f) {
+  if (zListen) { zListen.el.pause(); zListen.bar.remove(); }
+  const el = document.createElement('audio');
+  el.controls = true; el.className = 'listen-player'; el.src = URL.createObjectURL(f);
+  const bar = document.createElement('div');
+  bar.id = 'listenBar'; bar.innerHTML = '<b>🎧 ' + esc(f.name) + '</b>';
+  bar.appendChild(el);
+  const close = document.createElement('button');
+  close.className = 'icon-btn'; close.title = 'Dừng và đóng file nghe'; close.innerHTML = '<i data-lucide="x"></i>';
+  close.onclick = () => { socket.emit('listen:stop'); el.pause(); el.removeAttribute('src'); el.load(); bar.remove(); zListen = null; renderControls(); };
+  bar.appendChild(close);
+  $('controls').before(bar);
+  const send = () => socket.emit('listen:control', { playing: !el.paused && !el.ended, position: el.currentTime });
+  let last = 0;
+  el.addEventListener('play', send); el.addEventListener('pause', send); el.addEventListener('seeked', send); el.addEventListener('ended', send);
+  el.addEventListener('timeupdate', () => { if (!el.paused && Date.now() - last > 8000) { last = Date.now(); send(); } }); // gửi định kỳ để học sinh chỉnh lệch
+  zListen = { el, bar };
+  renderControls(); icons();
+}
+
+// Học sinh: bám theo trạng thái file nghe của giáo viên
+let lState = null, lAudio = null, lBar = null;
+function stopListen() {
+  if (lAudio) { lAudio.pause(); lAudio.removeAttribute('src'); lAudio.load(); }
+  if (lBar) lBar.remove();
+  lAudio = lBar = lState = null;
+  if (ZOOM) renderControls();
+}
+function applyListen(st) {
+  if (!st) return stopListen();
+  lState = st;
+  if (!lAudio || lAudio.dataset.id !== st.id) {
+    stopListen(); lState = st;
+    lAudio = document.createElement('audio');
+    lAudio.dataset.id = st.id; lAudio.preload = 'auto'; lAudio.volume = soundVolume;
+    lAudio.src = st.url + '?token=' + encodeURIComponent(Auth.token);
+    lBar = document.createElement('div');
+    lBar.id = 'listenBar';
+    lBar.innerHTML = '<b>🎧 ' + esc(st.name) + '</b><span class="sub" data-note style="font-size:12px;color:#a9a6c9">Giáo viên đang điều khiển file nghe</span><button class="btn btn-sm btn-accent" data-tap hidden><i data-lucide="play"></i> Bấm để nghe</button>';
+    lBar.querySelector('[data-tap]').onclick = () => { lBar.querySelector('[data-tap]').hidden = true; lAudio.play().catch(() => {}); };
+    $('controls').before(lBar); icons();
+    if (ZOOM) renderControls(); // hiện thanh âm lượng file nghe
+  }
+  const el = lAudio, want = Math.max(0, st.position || 0);
+  const sync = () => { if (Math.abs(el.currentTime - want) > 1) { try { el.currentTime = want; } catch { /* chưa tải xong: thử lại khi có metadata */ } } };
+  if (el.readyState >= 1) sync(); else el.addEventListener('loadedmetadata', sync, { once: true });
+  if (st.playing) {
+    el.play().then(() => { const t = lBar && lBar.querySelector('[data-tap]'); if (t) t.hidden = true; }).catch(() => { const t = lBar && lBar.querySelector('[data-tap]'); if (t) t.hidden = false; }); // trình duyệt chặn tự phát: cần bấm
+  } else el.pause();
+}
+
 function listenModal() {
   const m = openModal(`<h3>Phát file nghe 🎧</h3>
     <p class="sub">Chọn file âm thanh hoặc video (mp3, wav, m4a, mp4…). Cả lớp sẽ nghe đồng thời với âm thanh gốc; bạn có thể tạm dừng, tua, chỉnh âm lượng ngay trên thanh phát. Nên tắt micro của bạn khi phát.</p>
@@ -1258,6 +1335,7 @@ async function muteTeacherMain(on) {
 function setVolume(v) {
   soundVolume = Math.min(1, Math.max(0, v));
   try { localStorage.setItem('englive_volume', String(soundVolume)); } catch { /* chế độ riêng tư */ }
+  if (lAudio) lAudio.volume = soundVolume; // file nghe đồng bộ (Zoom)
   if (LK) LiveKitLive.setVolume(soundVolume); else video.volume = soundVolume;
 }
 const isSoundMuted = () => (LK ? soundMuted : video.muted);

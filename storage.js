@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), store = require('./db');
 const pending = new Map();
 function diskBytes(exclude = new Set()) {
   let bytes = 0;
-  for (const kind of ['pdfs', 'recordings']) {
+  for (const kind of ['pdfs', 'recordings', 'listening']) {
     const root = path.join(store.dir, kind);
     if (!fs.existsSync(root)) continue;
     for (const name of fs.readdirSync(root)) { const f = path.join(root, name); if (!exclude.has(f)) { const stat = fs.statSync(f); if (stat.isFile()) bytes += stat.size; } }

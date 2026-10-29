@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-module.exports = async ({ api, test, connect, emit, nextEvent, A, T, S1, S3, lessonId, restart }) => {
+module.exports = async ({ api, test, connect, emit, nextEvent, A, T, S1, S3, lessonId, restart, BASE }) => {
   console.log('Zoom Meeting SDK và lựa chọn dịch vụ theo ngày');
   await test('URL callback dùng IP loopback và chỉ quay lại đúng origin/cổng ban đầu', async () => {
     const urls = require('../public/js/zoom-urls');
@@ -103,6 +103,29 @@ module.exports = async ({ api, test, connect, emit, nextEvent, A, T, S1, S3, les
     assert.ok((await emit(ts, 'speak:revoke', null)).ok);
     assert.match((await revoked).reason, /Zoom/);
     assert.ok((await api(S1, 'POST', '/api/livekit/token', { classId: c.id })).status === 409);
+  });
+  await test('file nghe đồng bộ: giáo viên tải lên, học sinh nhận trạng thái và tệp, điều khiển, dọn khi dừng', async () => {
+    const audio = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(2000, 7)]);
+    const up = (token, name, body = audio, id = c.id) => fetch(BASE + '/api/classes/' + id + '/listening', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'X-Filename': encodeURIComponent(name) }, body });
+    assert.equal((await up(S1, 'a.mp3')).status, 403);
+    assert.equal((await up(T, 'virus.exe')).status, 400);
+    assert.equal((await up(T, 'empty.mp3', Buffer.alloc(0))).status, 400);
+    assert.equal((await up(T, 'a.mp3', audio, second.id)).status, 409);
+    const got = nextEvent(ss, 'listen:state', (x) => x && x.name === 'Bài nghe 1.mp3');
+    const r = await up(T, 'Bài nghe 1.mp3'); assert.equal(r.status, 200);
+    const st = await got; assert.equal(st.playing, false); assert.equal(st.position, 0);
+    const file = await fetch(BASE + st.url + '?token=' + S1); assert.equal(file.status, 200); assert.equal((await file.arrayBuffer()).byteLength, audio.length);
+    assert.equal((await fetch(BASE + st.url + '?token=' + S3)).status, 404);
+    assert.equal((await fetch(BASE + st.url)).status, 401);
+    const play = nextEvent(ss, 'listen:state', (x) => x && x.playing === true);
+    assert.ok((await emit(ts, 'listen:control', { playing: true, position: 12.5 })).ok);
+    const p = await play; assert.ok(p.position >= 12.5 && p.position < 14);
+    assert.match((await emit(ss, 'listen:control', { playing: false, position: 0 })).error, /Chưa có|file/);
+    assert.equal((await emit(ts, 'room:join', { classId: c.id })).listen.id, st.id);
+    assert.equal((await emit(ss, 'room:join', { classId: c.id })).listen.playing, true);
+    const gone = nextEvent(ss, 'listen:state', (x) => x === null);
+    assert.ok((await emit(ts, 'listen:stop')).ok); await gone;
+    assert.equal((await fetch(BASE + st.url + '?token=' + S1)).status, 404);
   });
   await test('Zoom Basic không cho hai lớp chung phòng hoặc cùng chủ trì đồng thời', async () => {
     const assign = body => api(A, 'PUT', '/api/admin/video/meetings/' + second.id, { password: 'p', hostMode: 'desktop', ...body });

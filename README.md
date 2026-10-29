@@ -27,7 +27,7 @@ Các thành phần tùy chọn (không bắt buộc để chạy):
 | **Zoom Meeting SDK** | Tùy chọn, cần tài khoản/app Zoom riêng: xem mục *Zoom Meeting SDK + LiveKit* bên dưới. Admin chọn dịch vụ mỗi ngày ở `/video-settings.html`. |
 | **Cho bạn bè ở máy khác vào thử** | `cloudflared tunnel --url http://localhost:3000` (xem mục *Cho bạn bè test qua link tạm*). Camera/micro cần **HTTPS hoặc localhost** — mở bằng `http://IP-LAN` trình duyệt sẽ chặn. |
 
-Lệnh thường dùng: `npm test` (77 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
+Lệnh thường dùng: `npm test` (78 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
 
 **Lưu ý bảo mật:** `data/` (chứa API key AI, token Zoom, mật khẩu băm, bản ghi) và `data-mock/` **không** được commit — giữ nguyên như vậy. Không dán khóa LiveKit/Zoom/AI vào chat hoặc commit. Trước khi mở cho người lạ: đổi/xóa tài khoản mẫu `123456`, đổi mật khẩu admin, tạo lại mọi khóa từng bị lộ. Biến môi trường khác: `PORT`, `DATA_DIR`, `AI_CONCURRENCY`, `LIVEKIT_PUBLIC_URL`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_PUBLIC_CLIENT_ID`, `ZOOM_REDIRECT_URI`.
 
@@ -60,6 +60,7 @@ SDK client view 6.2.0 được tải từ CDN chính thức của Zoom trong ifr
 | Mic, camera, share màn hình/âm thanh, phụ đề, breakout | Dùng UI Zoom, tùy quyền/gói/trình duyệt; không đồng bộ quyền mic/phòng nhóm với LiveKit |
 | Giơ tay, mời phát biểu, phụ đề, cảm xúc, tặng sao | Dùng trong EngLive như LiveKit. "Mời phát biểu" chỉ điều phối (học sinh nhận thông báo và tự bật mic trong Zoom; giáo viên thấy ai đang được mời) — micro/camera/chia sẻ của học sinh vẫn do Zoom quản lý. Phụ đề trực tiếp dùng nhận dạng giọng nói của trình duyệt giáo viên (Chrome/Edge) |
 | Ai đã vào Zoom | Bảng người xem của giáo viên hiện trạng thái từng học sinh: đang trong Zoom / đang chờ chủ trì / lỗi (bấm Kết nối Zoom) / đã rời |
+| File nghe | Nút 🎧 của giáo viên: tải file âm thanh lên, **mỗi học sinh tự phát trên máy mình, đồng bộ theo giáo viên** (phát/tạm dừng/tua), có thanh âm lượng. Giáo viên nên tắt mic Zoom khi phát để không vọng |
 | Chuyên cần | Thời gian có mặt trong EngLive; chưa xác minh thời gian kết nối video Zoom |
 | Ghi hình | Ghi tab trên Chrome/Edge, cần chọn âm thanh tab và cho phép micro, lưu bằng upload của EngLive; chưa đồng bộ Zoom Cloud, chưa kiểm thử thiết bị thật |
 | Kick/kết thúc | Xóa quyền EngLive và rời iframe; chủ trì cần dùng Remove/End trong Zoom để chắc chắn xóa người/kết thúc cuộc họp. Đặc biệt khi host đang mở ứng dụng Zoom riêng |

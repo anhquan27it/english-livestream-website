@@ -694,7 +694,7 @@ async function main() {
     throw new Error('Không khởi động lại được server kiểm thử.');
   };
   await require('./operations-smoke')({ api, test, connect, emit, nextEvent, sleep, restart, A, T, S1, S2, S3, classes, ielts, lessonId, scenes, quizIdx, quiz, mockUrl, dataDir, login, mediaCalls });
-  await require('./zoom-smoke')({ api, test, connect, emit, nextEvent, A, T, S1, S3, lessonId, restart });
+  await require('./zoom-smoke')({ api, test, connect, emit, nextEvent, A, T, S1, S3, lessonId, restart, BASE });
 }
 
 main().then(() => { console.log(`\nOK — ${passed} kiểm tra đạt`); cleanup(0); }, (e) => { console.error(e); cleanup(1); });
