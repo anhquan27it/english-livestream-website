@@ -76,7 +76,7 @@ async function init() {
   if (selectedProvider === 'livekit' && !LK) return showState('🔌', 'Chưa kết nối được LiveKit', 'Admin cần kiểm tra cấu hình LiveKit của máy chủ.', true);
   $('liveSub').textContent += ZOOM ? ' · Zoom Meeting' : LK ? ' · ' + LiveKitLive.label : ' · P2P';
   if (!LK) video.volume = soundVolume;
-  if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; setZoomLayout(savedZoomLayout()); }
+  if (ZOOM) { $('stage').classList.add('zoom-mode'); $('zoomHost').hidden = false; initZoomGrip(); initZoomSplitter(); setZoomLayout(savedZoomLayout()); }
   LessonLive.init({
     isTeacher, socket: null, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel'),
     onChange: () => aiChat && aiChat.reload(),
@@ -237,14 +237,81 @@ function mediaErrorText(e, what) {
 }
 
 // Bố cục slide + Zoom: slide lớn (Zoom thu nhỏ ở góc) → Zoom lớn (slide thu nhỏ) → chia đôi; nhớ lựa chọn
-const ZOOM_LAYOUTS = ['pip', 'zoom', 'split'], ZOOM_LAYOUT_LABEL = { pip: 'Slide lớn', zoom: 'Zoom lớn', split: 'Chia đôi' };
-function savedZoomLayout() { try { const k = localStorage.getItem('englive_zoom_layout'); return ZOOM_LAYOUTS.includes(k) ? k : 'pip'; } catch { return 'pip'; } }
+const ZOOM_LAYOUTS = ['split', 'pip', 'zoom'], ZOOM_LAYOUT_LABEL = { split: 'Slide + Zoom', pip: 'Slide lớn', zoom: 'Zoom lớn' };
+function savedZoomLayout() { try { const k = localStorage.getItem('englive_zoom_layout2'); return ZOOM_LAYOUTS.includes(k) ? k : 'split'; } catch { return 'split'; } }
+// Khung Zoom nhỏ ("Slide lớn"): kéo để di chuyển khỏi chỗ đang che slide, − / + đổi cỡ; nhớ vị trí và cỡ
+const ZOOM_PIP_KEY = 'englive_zoom_pip', ZOOM_SIZES = ['s', 'm', 'l'];
+let zoomPip = (() => {
+  try { const v = JSON.parse(localStorage.getItem(ZOOM_PIP_KEY)) || {}; return { size: ZOOM_SIZES.includes(v.size) ? v.size : 'm', x: typeof v.x === 'number' ? v.x : null, y: typeof v.y === 'number' ? v.y : null }; }
+  catch { return { size: 'm', x: null, y: null }; }
+})();
+const saveZoomPip = () => { try { localStorage.setItem(ZOOM_PIP_KEY, JSON.stringify(zoomPip)); } catch { /* chế độ riêng tư */ } };
+function applyZoomPip() {
+  const st = $('stage'), host = $('zoomHost');
+  if (st.dataset.zs !== zoomPip.size) st.dataset.zs = zoomPip.size;
+  const pip = st.classList.contains('with-slide') && st.dataset.zl !== 'zoom' && st.dataset.zl !== 'split';
+  if (!pip || zoomPip.x === null) { Object.assign(host.style, { left: '', top: '', right: '', bottom: '' }); return; }
+  const sr = st.getBoundingClientRect(), hr = host.getBoundingClientRect();
+  const left = Math.min(Math.max(0, zoomPip.x * sr.width), Math.max(0, sr.width - hr.width));
+  const top = Math.min(Math.max(0, zoomPip.y * sr.height), Math.max(0, sr.height - hr.height));
+  Object.assign(host.style, { left: left + 'px', top: top + 'px', right: 'auto', bottom: 'auto' });
+}
+// Thanh chia giữa slide và Zoom (bố cục "Slide + Zoom"): kéo để đổi tỉ lệ, nhớ lại lựa chọn
+const ZOOM_W_KEY = 'englive_zoom_w';
+function initZoomSplitter() {
+  const st = $('stage');
+  const set = (pct) => st.style.setProperty('--zw', Math.min(70, Math.max(25, pct)).toFixed(1) + '%');
+  const saved = (() => { try { return parseFloat(localStorage.getItem(ZOOM_W_KEY)); } catch { return NaN; } })();
+  if (saved) set(saved);
+  const bar = document.createElement('div');
+  bar.className = 'zoom-splitter'; bar.title = 'Kéo để đổi độ rộng Zoom (bấm đúp: 45% ↔ 65%)';
+  st.appendChild(bar);
+  const save = () => { try { localStorage.setItem(ZOOM_W_KEY, parseFloat(st.style.getPropertyValue('--zw'))); } catch { /* chế độ riêng tư */ } };
+  bar.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); bar.setPointerCapture(e.pointerId); st.classList.add('zsplit-drag');
+    const sr = st.getBoundingClientRect();
+    const move = (ev) => set((sr.right - ev.clientX) / sr.width * 100);
+    const up = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up); st.classList.remove('zsplit-drag'); save(); window.dispatchEvent(new Event('resize')); };
+    bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
+  });
+  bar.addEventListener('dblclick', () => { set(parseFloat(st.style.getPropertyValue('--zw')) > 55 ? 45 : 65); save(); window.dispatchEvent(new Event('resize')); });
+}
+
+function initZoomGrip() {
+  const st = $('stage'), host = $('zoomHost');
+  const g = document.createElement('div');
+  g.className = 'zoom-grip';
+  g.innerHTML = '<span class="zg-drag" title="Kéo để di chuyển khung Zoom (bấm đúp để về góc dưới)"><i data-lucide="grip-horizontal"></i></span><button type="button" data-zs="smaller" title="Thu nhỏ khung Zoom"><i data-lucide="minus"></i></button><button type="button" data-zs="bigger" title="Phóng to khung Zoom"><i data-lucide="plus"></i></button>';
+  host.prepend(g); icons();
+  g.querySelector('[data-zs="smaller"]').onclick = () => { zoomPip.size = ZOOM_SIZES[Math.max(0, ZOOM_SIZES.indexOf(zoomPip.size) - 1)]; saveZoomPip(); applyZoomPip(); };
+  g.querySelector('[data-zs="bigger"]').onclick = () => {
+    if (zoomPip.size === 'l') return setZoomLayout('zoom'); // đã lớn nhất: chuyển sang "Zoom lớn"
+    zoomPip.size = ZOOM_SIZES[ZOOM_SIZES.indexOf(zoomPip.size) + 1]; saveZoomPip(); applyZoomPip();
+  };
+  const drag = g.querySelector('.zg-drag');
+  drag.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); drag.setPointerCapture(e.pointerId);
+    const hr = host.getBoundingClientRect(), sr = st.getBoundingClientRect(), dx = e.clientX - hr.left, dy = e.clientY - hr.top;
+    const move = (ev) => {
+      zoomPip.x = Math.min(Math.max(0, ev.clientX - dx - sr.left), sr.width - hr.width) / sr.width;
+      zoomPip.y = Math.min(Math.max(0, ev.clientY - dy - sr.top), sr.height - hr.height) / sr.height;
+      applyZoomPip();
+    };
+    const up = () => { drag.removeEventListener('pointermove', move); drag.removeEventListener('pointerup', up); drag.removeEventListener('pointercancel', up); saveZoomPip(); };
+    drag.addEventListener('pointermove', move); drag.addEventListener('pointerup', up); drag.addEventListener('pointercancel', up);
+  });
+  drag.addEventListener('dblclick', () => { zoomPip.x = zoomPip.y = null; saveZoomPip(); applyZoomPip(); });
+  new MutationObserver(applyZoomPip).observe(st, { attributes: true, attributeFilter: ['class', 'data-zl'] });
+  addEventListener('resize', applyZoomPip);
+}
+
 function setZoomLayout(k) {
   $('stage').dataset.zl = k;
-  try { localStorage.setItem('englive_zoom_layout', k); } catch { /* chế độ riêng tư */ }
+  try { localStorage.setItem('englive_zoom_layout2', k); } catch { /* chế độ riêng tư */ }
   $('swapBtn').title = 'Đang: ' + ZOOM_LAYOUT_LABEL[k] + ' — bấm để đổi cách hiển thị slide và Zoom';
   $('swapBtn').innerHTML = '<i data-lucide="layout-dashboard"></i> ' + ZOOM_LAYOUT_LABEL[k];
   icons();
+  if (ZOOM && $('controls').childElementCount) renderControls(); // cập nhật nút bố cục đang chọn
   setTimeout(() => window.dispatchEvent(new Event('resize')), 50); // slide vẽ lại theo khung mới
 }
 
@@ -531,10 +598,13 @@ const zoomPresence = (v) => ({ joined: '● Đang trong Zoom', waiting: '⏳ Đa
 
 function renderZoomControls() {
   const box = $('controls');
+  const zl = $('stage').dataset.zl || 'split';
   box.innerHTML = ctrl('zReconnect', 'video', 'Kết nối Zoom') + SEP +
+    ctrl('zLayoutSplit', 'columns-2', 'Bố cục: Slide + Zoom cân bằng (kéo thanh giữa để đổi tỉ lệ)', zl === 'split' ? 'on' : '') + ctrl('zLayoutPip', 'picture-in-picture-2', 'Bố cục: Slide lớn, Zoom thu nhỏ', zl === 'pip' ? 'on' : '') + ctrl('zLayoutZoom', 'monitor-play', 'Bố cục: Zoom / chia sẻ màn hình lớn', zl === 'zoom' ? 'on' : '') + SEP +
     (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + (speaking ? ctrl('zSpeak', 'mic', 'Bạn được mời phát biểu — bật micro trong Zoom', 'on') : '') + ctrl('zReact', 'smile', 'Cảm xúc') + ctrl('zCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '')) + SEP +
     ctrl('zFull', 'maximize', 'Toàn màn hình') + ctrl('zLeave', isTeacher ? 'square' : 'log-out', isTeacher ? 'Kết thúc buổi học' : 'Rời lớp', 'danger');
   $('zReconnect').onclick = ZoomLive.retry;
+  $('zLayoutSplit').onclick = () => setZoomLayout('split'); $('zLayoutPip').onclick = () => setZoomLayout('pip'); $('zLayoutZoom').onclick = () => setZoomLayout('zoom');
   $('zFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {});
   $('zLeave').onclick = isTeacher ? endLive : leave;
   if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zCap').onclick = toggleCaptions; $('zRecord').onclick = toggleZoomRecord; }

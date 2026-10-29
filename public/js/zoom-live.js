@@ -33,7 +33,7 @@ const ZoomLive = (() => {
       if (e.data?.type === 'zoom:error') options.onStatus(e.data.message || 'Không kết nối được Zoom.', true);
       if (e.data?.type === 'zoom:left') { joined = false; if (options.onState) options.onState('left'); options.onStatus('Đã rời Zoom. Bạn vẫn có thể xem slide và chat. Bấm Kết nối Zoom để vào lại.'); }
     };
-    addEventListener('message', listener); frame.src = '/zoom-embed.html'; options.container.replaceChildren(frame);
+    addEventListener('message', listener); frame.src = '/zoom-embed.html'; [...options.container.children].forEach((n) => { if (!n.classList.contains('zoom-grip')) n.remove(); }); options.container.appendChild(frame); // giữ thanh kéo
   }
   const retry = () => { if (joined) return toast('Zoom đang kết nối. Hãy sử dụng điều khiển trong khung Zoom.'); const opts = options; disconnect(); if (opts) connect(opts); };
   return { connect, disconnect, retry };
