@@ -64,6 +64,10 @@ async function main() {
   const mockUrl = `http://127.0.0.1:${mock.address().port}`;
   const bootstrap = spawnSync(process.execPath, ['scripts/create-admin.js', 'admin@test.com'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DATA_DIR: dataDir, ADMIN_PASSWORD: 'admin-test-password' }, encoding: 'utf8' });
   assert.equal(bootstrap.status, 0, bootstrap.stderr);
+  if(process.env.TEST_POSTGRES==='1') {
+    const activation=spawnSync(process.execPath,['scripts/activate-postgres.js'],{cwd:path.join(__dirname,'..'),env:{...process.env,DATA_DIR:dataDir},encoding:'utf8',timeout:30000});
+    assert.equal(activation.status,0,activation.stderr);
+  }
   const serverOptions = {
     cwd: path.join(__dirname, '..'),
     env: { ...process.env, PORT, DATA_DIR: dataDir, AI_BASE_URL: mockUrl, AI_API_KEY: 'secret-test-key', AI_MODEL: 'ag/gemini-3.8-flash-high', LIVEKIT_URL: mediaUrl, LIVEKIT_API_KEY: 'testkey', LIVEKIT_API_SECRET: LK_SECRET },
@@ -739,9 +743,9 @@ async function main() {
     // mọi sự kiện: quá nhanh thì bị bỏ và người gửi được báo
     const flood = nextEvent(ssock, 'rate:limited', () => true, 6000);
     for (let i = 0; i < 700; i++) ssock.emit('hand', { raised: i % 2 === 0 });
+    const late = emit(ssock, 'room:join', { classId: cls.id }); // gửi ngay sau đợt spam, khi xô đã cạn
     assert.ok((await flood).event);
-    const late = await emit(ssock, 'room:join', { classId: cls.id });
-    assert.match(late.error, /quá nhanh/); // ack vẫn được trả lời khi bị giới hạn
+    assert.match((await late).error, /quá nhanh/); // ack vẫn được trả lời khi bị giới hạn
     tsock.close(); ssock.close();
     await api(T, 'DELETE', '/api/classes/' + cls.id + '/live');
   });

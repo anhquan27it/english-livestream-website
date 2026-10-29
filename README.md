@@ -1,5 +1,7 @@
 # EngLive — Web học tiếng Anh livestream
 
+**Database đã dùng PostgreSQL:** xem [database/USAGE.md](database/USAGE.md). Chạy `npm start` như cũ và kiểm tra dòng `Database: postgres`; `npm run db:status` xem kết nối/số bản ghi. JSON cũ giữ làm bản trước chuyển đổi, không còn là nguồn dữ liệu mới nhất.
+
 Lớp học trực tiếp 1 giáo viên → nhiều học sinh (tối đa 30 học sinh/lớp theo mặc định), có admin/trợ giảng. Giáo viên soạn slide + trò chơi bằng AI từ PDF, trình chiếu trong buổi live; học sinh tương tác và hỏi AI. Video qua **LiveKit** (chính), **Zoom Meeting SDK** (tùy chọn) hoặc WebRTC P2P (dự phòng).
 
 ## Bắt đầu nhanh (cho người mới pull về)

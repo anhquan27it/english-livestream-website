@@ -210,7 +210,7 @@ module.exports = async function(c) {
   });
   await test('snapshot và bản sao JSON tồn tại, backup chỉ dành admin',async()=>{
     const backup=await api(A,'POST','/api/admin/backups');assert.equal(backup.status,200);
-    const disk=JSON.parse(fs.readFileSync(path.join(dataDir,'db.json'),'utf8'));assert.ok(disk.liveSnapshots[ielts.id]);assert.ok(fs.existsSync(path.join(dataDir,'backups',backup.body.name)));
+    const disk=JSON.parse(fs.readFileSync(path.join(dataDir,'backups',backup.body.name),'utf8'));assert.ok(disk.liveSnapshots[ielts.id]);assert.ok(fs.existsSync(path.join(dataDir,'backups',backup.body.name)));
     assert.equal((await api(S1,'POST','/api/admin/backups')).status,403);
   });
   ts.close();ss.close();

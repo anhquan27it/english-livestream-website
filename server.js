@@ -29,11 +29,23 @@ app.disable('x-powered-by');
 app.use(security.headers({ getLivekitUrl: () => (lk.enabled ? lk.config.publicUrl : '') }));
 
 app.use(express.json({ limit: '2mb' }));
+// A successful HTTP response must not precede its PostgreSQL commit.
+app.use((req,res,next)=>{
+  if(store.driver==='postgres') {
+    const send=res.json;
+    res.json=function(body) {
+      if(res.statusCode<400) try { store.flush(); }
+      catch { res.status(503); return send.call(this,{error:'Không lưu được dữ liệu. Kiểm tra PostgreSQL và khởi động lại server.'}); }
+      return send.call(this,body);
+    };
+  }
+  next();
+});
 app.use('/zoom-embed.html', (req, res, next) => { res.set({ 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' }); next(); });
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kiểm tra dịch vụ sau khi triển khai, không cần đăng nhập.
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/healthz', (req, res) => res.json({ ok: true, storage: store.driver }));
 
 // ---------- Trạng thái livestream (trong bộ nhớ) ----------
 // classId -> { title, startedAt, teacherSocket, viewers: Map<socketId, {userId, name, hand}>, attendees:Set, peak, word }
@@ -283,7 +295,7 @@ app.delete('/api/classes/:id', auth('teacher'), (req, res) => {
   const c = ownClass(req, res);
   if (!c) return;
   endLive(c, 'Lớp học đã bị xoá.');
-  db().classes = db().classes.filter((x) => x.id !== c.id);
+  store.removeClassData(c.id);
   store.save();
   notifyClass(c);
   res.json({ ok: true });
@@ -643,6 +655,7 @@ app.use((err, req, res, next) => { console.error('[request]', err.message); if (
 function shutdown() { checkpoint(); store.flush(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); }
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 server.listen(PORT, () => {
+  console.log('Database: ' + store.driver);
   console.log(`EngLive đang chạy tại http://localhost:${PORT}`);
   const todayProvider = videoProvider.provider(lk);
   console.log(`Video cho buổi mở ngày ${videoProvider.day()}: ${todayProvider === 'zoom' ? 'Zoom Meeting SDK' : todayProvider === 'livekit' ? 'LiveKit' : 'WebRTC P2P'}`);

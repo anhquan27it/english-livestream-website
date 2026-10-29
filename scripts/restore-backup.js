@@ -3,7 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const dir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const name = process.argv[2] || '';
+const profile=path.join(dir,'storage.json');
+const postgresSelected=process.env.STORAGE_DRIVER==='postgres'||(!process.env.STORAGE_DRIVER&&fs.existsSync(profile)&&JSON.parse(fs.readFileSync(profile,'utf8')).driver==='postgres');
 if (!/^db-[\dTZ-]+\.json$/.test(name)) throw new Error('Chạy khi server đã dừng: npm run backup:restore -- db-....json');
+if(postgresSelected) {
+  const store=require('../db');
+  store.lock();
+  const restored=JSON.parse(fs.readFileSync(path.join(dir,'backups',name),'utf8'));
+  if(!Array.isArray(restored.users)||!Array.isArray(restored.classes)||!restored.tokens)throw new Error('Bản sao không đúng định dạng EngLive.');
+  store.backup();
+  restored.tokens={};
+  for(const key of Object.keys(store.data)) delete store.data[key];
+  Object.assign(store.data,restored);
+  store.flush();
+  console.log('Đã khôi phục PostgreSQL. Mọi người cần đăng nhập lại. PDF/video phải sao lưu riêng.');
+} else {
 const lock = path.join(dir, '.writer.lock');
 if (fs.existsSync(lock)) {
   const pid = Number(fs.readFileSync(lock, 'utf8'));
@@ -22,3 +36,4 @@ const tmp = path.join(dir, 'restore.tmp');
 fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
 fs.renameSync(tmp, current);
 console.log('Đã khôi phục. Khởi động server rồi đăng nhập lại. Tệp PDF/video cần được sao lưu riêng.');
+}

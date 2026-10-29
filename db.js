@@ -5,6 +5,10 @@ const crypto = require('crypto');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const FILE = path.join(DATA_DIR, 'db.json');
+const profileFile = path.join(DATA_DIR, 'storage.json');
+const driver = process.env.STORAGE_DRIVER || (fs.existsSync(profileFile) ? JSON.parse(fs.readFileSync(profileFile,'utf8')).driver : 'json');
+if (!['json','postgres'].includes(driver)) throw new Error('Storage driver không hợp lệ.');
+let postgres = null, storageFailure = null;
 
 let db = null;
 let lockFile = null;
@@ -79,7 +83,12 @@ function seed() {
 
 function load() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (fs.existsSync(FILE)) {
+  if (driver === 'postgres') {
+    const keyFile = path.join(DATA_DIR,'postgres.key');
+    if (!fs.existsSync(keyFile)) throw new Error('Thiếu postgres.key; không thể giải mã cấu hình và phiên đăng nhập.');
+    postgres = require('./database/bridge').bridge(require('./database/postgres').configuration(),fs.readFileSync(keyFile),process.env.ENGLIVE_PG_SCHEMA || 'englive');
+    db = postgres.call('open');
+  } else if (fs.existsSync(FILE)) {
     try { db = JSON.parse(fs.readFileSync(FILE, 'utf8')); }
     catch (e) { throw new Error('Không đọc được db.json. Giữ nguyên file và khôi phục từ bản sao lưu: ' + e.message); }
   } else {
@@ -115,6 +124,11 @@ function save() {
 
 function flush() {
   clearTimeout(saveTimer);
+  if (storageFailure) throw storageFailure;
+  if (postgres) {
+    try { postgres.call('write',db); return; }
+    catch(e) { storageFailure=e; throw e; }
+  }
   const tmp = FILE + '.tmp';
   const fd = fs.openSync(tmp, 'w');
   try { fs.writeFileSync(fd, JSON.stringify(db, null, 2)); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
@@ -126,7 +140,8 @@ function backup() {
   const dir = path.join(DATA_DIR, 'backups');
   fs.mkdirSync(dir, { recursive: true });
   const name = 'db-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
-  fs.copyFileSync(FILE, path.join(dir, name));
+  if (postgres) fs.writeFileSync(path.join(dir,name),JSON.stringify(db,null,2),{mode:0o600});
+  else fs.copyFileSync(FILE, path.join(dir, name));
   const files = fs.readdirSync(dir).filter(n => /^db-[\dTZ-]+\.json$/.test(n)).sort();
   for (const old of files.slice(0, -14)) fs.unlinkSync(path.join(dir, old));
   return name;
@@ -147,6 +162,15 @@ function consumeAI(userId, kind) {
   usage[kind]++; save(); return true;
 }
 
+function removeClassData(classId) {
+  const assignments=new Set(db.assignments.filter(a=>a.classId===classId).map(a=>a.id));
+  db.schedules=db.schedules.filter(s=>s.classId!==classId);
+  db.assignments=db.assignments.filter(a=>a.classId!==classId);
+  db.submissions=db.submissions.filter(s=>!assignments.has(s.assignmentId));
+  db.activityResults=db.activityResults.filter(r=>r.classId!==classId);
+  db.classes=db.classes.filter(c=>c.id!==classId);
+}
+
 // Cấu hình cục bộ chờ áp dụng khi đã giữ writer lock, tránh server cũ ghi đè tài khoản.
 function applyAdminSetup() {
   if (!lockFile) throw new Error('Cần khóa dữ liệu trước khi nạp tài khoản admin.');
@@ -165,10 +189,13 @@ function applyAdminSetup() {
 }
 
 load();
+process.on('exit',()=>{ if(postgres) { try { if(!storageFailure) flush(); } catch {} postgres.close(); } });
 
 module.exports = {
   dir: DATA_DIR,
-  get data() { return db; },
+  get data() { if(storageFailure) throw storageFailure; return db; },
+  driver,
+  removeClassData,
   save,
   flush, backup, audit, consumeAI, lock, unlock, applyAdminSetup,
   id,

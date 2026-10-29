@@ -4,6 +4,17 @@
   "description": "EngLive - web hoc tieng Anh livestream (giao vien / hoc sinh)",
   "main": "server.js",
   "scripts": {
+    "db:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-postgres.ps1",
+    "db:status": "node scripts/database.js status",
+    "db:migrate": "node scripts/database.js migrate",
+    "db:plan": "node scripts/database.js plan",
+    "db:import": "node scripts/database.js import",
+    "test:postgres": "node tests/postgres-schema.js",
+    "db:verify": "node tests/postgres-local.js",
+    "db:activate": "node scripts/activate-postgres.js activate",
+    "db:rollback": "node scripts/activate-postgres.js rollback",
+    "test:postgres:app": "node tests/postgres-app.js",
+    "test:postgres:runtime": "node tests/postgres-runtime.js",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node tests/smoke.js",
@@ -23,10 +34,12 @@
   "dependencies": {
     "express": "^4.22.3",
     "livekit-server-sdk": "^2.19.2",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.4",
     "unpdf": "^1.9.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "socket.io-client": "^4.8.4"
   }
 }

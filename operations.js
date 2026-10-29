@@ -64,12 +64,7 @@ function createRouter(ctx) {
   r.delete('/api/admin/classes/:id', (req, res) => {
     const c = findClass(req.params.id); if (!c) return res.status(404).json({ error: 'Không có lớp.' });
     endLive(c, 'Lớp học đã bị xoá.');
-    const aIds = new Set(db.assignments.filter(a => a.classId === c.id).map(a => a.id));
-    db.schedules = db.schedules.filter(s => s.classId !== c.id);
-    db.assignments = db.assignments.filter(a => a.classId !== c.id);
-    db.submissions = db.submissions.filter(s => !aIds.has(s.assignmentId));
-    db.activityResults = db.activityResults.filter(a => a.classId !== c.id);
-    db.classes = db.classes.filter(x => x !== c);
+    store.removeClassData(c.id);
     store.audit(req.user, 'class.delete', c.id, c.name); notifyClass(c); res.json({ ok: true });
   });
   r.patch('/api/admin/classes/:id', (req, res) => {
