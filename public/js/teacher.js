@@ -35,7 +35,9 @@ if (me) {
   const zoomResult = new URLSearchParams(location.search).get('zoom');
   if (zoomResult === 'connected') toast('Đã liên kết Zoom. Bạn có thể mở cuộc họp ngay trong web.', 'success');
   else if (zoomResult) showZoomLinkError();
-  document.getElementById('hello').textContent = `${greeting()}, ${me.name}! 👋`;
+  // Nút "Tạo lớp mới" nổi bật ở thanh bên: trên trang này mở hộp tạo lớp; trang khác dẫn về đây với ?new=1
+  document.querySelector('[data-side-cta]').onclick = (e) => { e.preventDefault(); document.getElementById('sidebar').classList.remove('open'); newClass(); };
+  if (new URLSearchParams(location.search).has('new')) { history.replaceState(null, '', location.pathname); newClass(); }
   load();
   const socket = connectSocket();
   socket.on('classes:changed', () => load());
@@ -80,29 +82,40 @@ function renderClassList(items) {
     <button class="btn btn-primary" data-new-empty><i data-lucide="plus"></i> Tạo lớp mới</button></div>`;
   grid.querySelectorAll('[data-manage]').forEach((b) => (b.onclick = () => manageClass(b.dataset.manage)));
   grid.querySelectorAll('[data-new-empty]').forEach((b) => (b.onclick = () => newClass()));
+  grid.querySelectorAll('[data-copy-code]').forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copyCode); toast('Đã sao chép mã lớp ' + b.dataset.copyCode, 'success'); } catch { toast('Mã lớp: ' + b.dataset.copyCode); } }));
+  grid.querySelectorAll('[data-go-grade]').forEach((b) => (b.onclick = () => { location.href = '/learning.html'; }));
+  grid.querySelectorAll('.cs[data-manage]').forEach((b) => (b.onkeydown = (e) => { if (e.key === 'Enter') b.click(); }));
   grid.querySelectorAll('[data-golive]').forEach((b) => (b.onclick = () => startLive(b.dataset.golive)));
 
 }
 
 function classCard(c) {
-  return `<article class="catalog-card">
-    <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
-    <div class="catalog-summary">
-      <div class="catalog-heading"><h3>${esc(c.name)}</h3><span class="chip chip-muted">${esc(c.level)}</span>${c.live ? '<span class="badge-live">LIVE</span>' : ''}</div>
-      <p>${esc(c.description || 'Chưa có mô tả.')}</p>
-      <div class="class-meta">
-        <span><i data-lucide="users"></i>${c.students.length}/${c.maxStudents} học sinh</span>
-        <span><i data-lucide="video"></i>${c.history.length} buổi</span>
-        <span class="catalog-code" title="Mã lớp"><i data-lucide="key-round"></i>${esc(c.code)}</span>
-        ${c.pending.length ? `<span class="chip chip-warn">${c.pending.length} chờ duyệt</span>` : ''}
+  const sm = c.summary || {}, live = !!c.live;
+  return `<article class="catalog-card ctile ${live ? 'is-live' : ''}" data-color="${esc(c.color)}">
+    <header class="ctile-head">
+      <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
+      <div class="ctile-title">
+        <h3>${esc(c.name)}</h3>
+        <div class="ctile-tags"><span class="chip chip-muted">${esc(c.level)}</span>${live ? '<span class="badge-live">LIVE</span>' : ''}</div>
       </div>
+      <button class="ctile-code" data-copy-code="${esc(c.code)}" title="Bấm để sao chép mã lớp"><i data-lucide="key-round"></i>${esc(c.code)}</button>
+    </header>
+    ${c.description ? `<p class="ctile-desc">${esc(c.description)}</p>` : ''}
+    <div class="ctile-stats">
+      ${ClassTile.stat('users', c.students.length + '/' + c.maxStudents, 'Học sinh')}
+      ${ClassTile.stat('video', c.history.length, 'Buổi đã dạy')}
+      ${ClassTile.stat('user-plus', c.pending.length, 'Chờ duyệt', c.pending.length ? 'warn clickable' : '', c.pending.length ? `data-manage="${c.id}" role="button" tabindex="0" title="Mở để duyệt"` : '')}
+      ${ClassTile.stat('pen-line', sm.toGrade || 0, 'Bài cần chấm', sm.toGrade ? 'warn clickable' : '', sm.toGrade ? 'data-go-grade role="button" tabindex="0" title="Mở trang chấm bài"' : '')}
     </div>
-      <div class="catalog-actions">
-        <button class="btn btn-outline btn-sm" data-manage="${c.id}" aria-label="Quản lý lớp ${esc(c.name)}">Quản lý lớp</button>
-        ${c.live
-          ? `<button class="btn btn-live btn-sm" data-golive="${c.id}"><i data-lucide="radio"></i> Vào phòng live</button>`
-          : `<button class="btn btn-primary btn-sm" data-golive="${c.id}"><i data-lucide="video"></i> Livestream</button>`}
-      </div>
+    ${ClassTile.bar('Sĩ số', c.students.length, c.maxStudents)}
+    ${ClassTile.next(sm.next, live ? c.live.title : '')}
+    <div class="ctile-actions">
+      ${live
+        ? `<button class="btn btn-live" data-golive="${c.id}"><i data-lucide="radio"></i> Vào phòng live</button>`
+        : `<button class="btn btn-primary" data-golive="${c.id}"><i data-lucide="video"></i> Livestream</button>`}
+      <button class="btn btn-outline" data-manage="${c.id}" aria-label="Quản lý lớp ${esc(c.name)}"><i data-lucide="settings-2"></i> Quản lý lớp</button>
+      ${sm.lastSessionAt ? `<span class="ctile-last" title="Buổi gần nhất">Buổi trước: ${esc(ClassTile.when(sm.lastSessionAt))}${sm.lastAttendance != null ? ' · ' + sm.lastAttendance + ' HS' : ''}</span>` : ''}
+    </div>
   </article>`;
 }
 

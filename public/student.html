@@ -9,18 +9,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/classes.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
   <div class="app">
     <aside class="sidebar" id="sidebar"></aside>
 
     <main class="main" id="top">
-      <div class="topbar">
-        <div style="display:flex;gap:12px;align-items:center">
-          <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
-          <div><h1 id="hello"></h1><p>Let's learn something new today.</p></div>
-        </div>
-        <div class="topbar-actions"><button class="btn btn-primary" id="joinBtn"><i data-lucide="key-round"></i> Nhập mã lớp</button></div>
+      <div class="mbar">
+        <button class="icon-btn" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+        <a href="/" class="brand"><span>Eng<b>Live</b></span></a>
+        <button class="btn btn-primary btn-sm" id="joinBtn"><i data-lucide="key-round"></i> Nhập mã lớp</button>
       </div>
 
       <div id="liveNow"></div>

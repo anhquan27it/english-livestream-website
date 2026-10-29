@@ -16,12 +16,14 @@ const WORDS = [
 if (me) {
   buildSidebar('student', 'home');
   setupShell(me);
-  document.getElementById('hello').textContent = `${greeting()}, ${me.name}! ☀️`;
   renderWord();
   load();
   const socket = connectSocket();
   socket.on('classes:changed', () => load(true));
   document.getElementById('joinBtn').onclick = joinClass;
+  // Nút "Nhập mã lớp" nổi bật ở thanh bên: trên trang này mở hộp nhập mã ngay; trang khác dẫn về đây với ?join=1
+  document.querySelector('[data-side-cta]').onclick = (e) => { e.preventDefault(); document.getElementById('sidebar').classList.remove('open'); joinClass(); };
+  if (new URLSearchParams(location.search).has('join')) { history.replaceState(null, '', location.pathname); joinClass(); }
 }
 
 async function load(notify = false) {
@@ -67,31 +69,35 @@ function render() {
 }
 
 function renderClassList(items) {
-  document.getElementById('classGrid').innerHTML = classes.length ? items.map((c) => `
-    <article class="catalog-card">
-      <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
-      <div class="catalog-summary">
-        <div class="catalog-heading"><h3>${esc(c.name)}</h3><span class="chip chip-muted">${esc(c.level)}</span>${c.live && c.status === 'member' ? '<span class="badge-live">LIVE</span>' : ''}</div>
-        <p>${esc(c.description || '')}</p>
-        <div class="class-meta">
-          <span><i data-lucide="user-round"></i>${esc(c.teacher)}</span>
-          <span><i data-lucide="users"></i>${c.studentCount}/${c.maxStudents} học sinh</span>
+  document.getElementById('classGrid').innerHTML = classes.length ? items.map((c) => {
+    const member = c.status === 'member', live = c.live && member, sm = c.summary || {};
+    return `
+    <article class="catalog-card ctile ${live ? 'is-live' : ''}" data-color="${esc(c.color)}">
+      <header class="ctile-head">
+        <div class="catalog-mark cover-${esc(c.color)}" aria-hidden="true">${CLASS_EMOJI[c.color] || '📘'}</div>
+        <div class="ctile-title">
+          <h3>${esc(c.name)}</h3>
+          <small class="ctile-sub"><i data-lucide="user-round"></i>${esc(c.teacher || 'Chưa có giáo viên')}</small>
+          <div class="ctile-tags"><span class="chip chip-muted">${esc(c.level)}</span>${live ? '<span class="badge-live">LIVE</span>' : ''}${member ? '' : '<span class="chip chip-warn"><i data-lucide="clock"></i> Chờ duyệt</span>'}</div>
         </div>
+      </header>
+      ${c.description ? `<p class="ctile-desc">${esc(c.description)}</p>` : ''}
+      <div class="ctile-stats">
+        ${ClassTile.stat('users', c.studentCount + '/' + c.maxStudents, 'Sĩ số')}
+        ${member ? ClassTile.stat('clipboard-list', sm.homeworkTodo ? sm.homeworkTodo + ' bài' : 'Xong', sm.homeworkTodo ? 'cần làm' + (sm.homeworkDue ? ' · hạn ' + ClassTile.when(sm.homeworkDue) : '') : 'Bài tập', sm.homeworkTodo ? 'warn clickable' : 'ok', sm.homeworkTodo ? 'data-go-hw role="button" tabindex="0" title="Mở bài tập"' : '') : ''}
+        ${member ? ClassTile.stat('history', sm.lastSessionAt ? ClassTile.day(sm.lastSessionAt) : '—', 'Buổi gần nhất') : ''}
       </div>
-        <div class="catalog-actions">
-          ${c.status === 'pending'
-            ? '<span class="chip chip-warn"><i data-lucide="clock"></i> Chờ giáo viên duyệt</span>'
-            : `<span class="chip chip-ok"><i data-lucide="check"></i> Đã học ${c.attended}/${c.sessions} buổi</span>`}
-          ${c.status === 'member' ? `<button class="icon-btn" data-rec="${c.id}" title="Xem lại buổi học đã ghi hình"><i data-lucide="film"></i></button>` : ''}
-          ${c.live && c.status === 'member'
-            ? `<a class="btn btn-live btn-sm" href="/devices.html?next=${encodeURIComponent('/live.html?class='+c.id)}"><i data-lucide="play"></i> Vào học</a>`
-            : c.status === 'member' ? `<a class="btn btn-outline btn-sm" href="/tutor.html?class=${c.id}"><i data-lucide="bot"></i> Hỏi AI</a>` : ''}
-        </div>
-    </article>`).join('') : `
+      ${member ? ClassTile.bar('Đã tham gia', c.attended, c.sessions) + ClassTile.next(sm.next, live ? c.live.title : '') : '<div class="ctile-next muted"><i data-lucide="hourglass"></i><span>Giáo viên sẽ duyệt yêu cầu vào lớp của bạn</span></div>'}
+      <div class="ctile-actions">
+        ${live ? `<a class="btn btn-live" href="/devices.html?next=${encodeURIComponent('/live.html?class='+c.id)}"><i data-lucide="play"></i> Vào học ngay</a>` : ''}
+        ${member ? `<a class="btn ${live ? 'btn-outline' : 'btn-primary'}" href="/tutor.html?class=${c.id}"><i data-lucide="bot"></i> Hỏi AI</a><a class="btn btn-outline" href="/learning.html"><i data-lucide="clipboard-list"></i> Bài tập</a><button class="icon-btn" data-rec="${c.id}" title="Xem lại buổi học đã ghi hình" aria-label="Xem lại bản ghi"><i data-lucide="film"></i></button>` : ''}
+      </div>
+    </article>`; }).join('') : `
     <div class="card empty" style="grid-column:1/-1"><div class="emoji">🎒</div><b>Bạn chưa tham gia lớp nào</b>Hỏi giáo viên mã lớp và nhập để xin vào lớp nhé.<br /><br />
     <button class="btn btn-primary" data-join-empty><i data-lucide="key-round"></i> Nhập mã lớp</button></div>`;
   document.querySelectorAll('[data-rec]').forEach((b) => (b.onclick = () => openRecordings(b.dataset.rec, false)));
   document.querySelectorAll('[data-join-empty]').forEach((b) => (b.onclick = () => joinClass()));
+  document.querySelectorAll('[data-go-hw]').forEach((b) => { b.onclick = () => { location.href = '/learning.html'; }; b.onkeydown = (e) => { if (e.key === 'Enter') b.click(); }; });
   icons();
 }
 

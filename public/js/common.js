@@ -208,8 +208,12 @@ function buildSidebar(role, active) {
   const promo = isAdmin ? '' : role === 'teacher'
     ? '<div class="promo"><span class="emoji">🎙️</span><b>Teaching tip</b><p>Soạn bài trước, chiếu slide và chơi game để lớp học sôi động hơn.</p></div>'
     : '<div class="promo" style="background:linear-gradient(150deg,#ff8a3d,#f43f6e)"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
+  const cta = isAdmin ? '' : role === 'teacher'
+    ? '<a href="/teacher.html?new=1" class="side-cta" data-side-cta><span class="side-cta-ic"><i data-lucide="plus"></i></span><span>Tạo lớp mới<small>Học sinh vào bằng mã lớp</small></span></a>'
+    : '<a href="/student.html?join=1" class="side-cta" data-side-cta><span class="side-cta-ic"><i data-lucide="key-round"></i></span><span>Nhập mã lớp<small>Tham gia lớp học mới</small></span></a>';
   document.getElementById('sidebar').innerHTML = `
     <a href="/" class="brand"><span class="brand-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
+    ${cta}
     <nav class="side-nav">${nav.map(([id, href, ic, label]) => `<a href="${href}" class="${id === active ? 'active' : ''}"><i data-lucide="${ic}"></i> ${label}</a>`).join('')}</nav>
     <div class="side-foot">${promo}
       <div class="me"><span data-me-avatar></span><div class="info"><b data-me-name></b><small>${({admin:'Quản trị viên',teacher:'Giáo viên',assistant:'Trợ giảng',student:'Học sinh'})[Auth.user?.role] || 'Người dùng'}</small></div>

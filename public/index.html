@@ -4,151 +4,180 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EngLive — Học tiếng Anh trực tiếp</title>
+  <meta name="description" content="Lớp tiếng Anh livestream: giáo viên dạy trực tiếp, slide và trò chơi do AI soạn, học sinh hỏi AI mọi lúc." />
   <script src="/js/common.js"></script>
   <script src="/js/home-entry.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/home.css" />
 </head>
-<body>
-  <nav class="nav" id="nav">
-    <div class="container nav-inner">
-      <a href="/" class="brand"><span class="brand-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
-      <div class="nav-links">
+<body class="home">
+  <!-- Nền chuyển động: các khối màu trôi + lưới + hạt sáng -->
+  <div class="h-bg" aria-hidden="true">
+    <span class="h-orb o1"></span><span class="h-orb o2"></span><span class="h-orb o3"></span><span class="h-orb o4"></span>
+    <span class="h-grid"></span>
+    <span class="h-stars"></span>
+  </div>
+
+  <nav class="h-nav" id="nav">
+    <div class="h-wrap h-nav-in">
+      <a href="/" class="h-brand"><span class="h-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
+      <div class="h-links">
         <a href="#features">Tính năng</a>
-        <a href="#roles">Giáo viên & Học sinh</a>
         <a href="#how">Cách học</a>
+        <a href="#start">Bắt đầu</a>
       </div>
-      <div class="nav-actions" id="navActions">
-        <button class="btn btn-ghost" data-auth="login">Đăng nhập</button>
-        <button class="btn btn-primary btn-sm" data-auth="register">Bắt đầu miễn phí</button>
+      <div class="h-nav-actions">
+        <button class="h-btn h-ghost" data-auth="register">Đăng ký</button>
+        <button class="h-btn h-glow" data-auth="login"><i data-lucide="log-in"></i> Đăng nhập</button>
       </div>
     </div>
   </nav>
 
-  <header class="hero">
-    <div class="container hero-grid">
-      <div>
-        <span class="pill"><span class="dot"></span> Lớp học livestream 1 thầy – nhiều trò</span>
-        <h1>Nói tiếng Anh tự tin với lớp học <span class="hl">trực tiếp</span></h1>
-        <p class="lead">Tham gia buổi học livestream cùng giáo viên của bạn, luyện phát âm, học từ vựng ngay trên màn hình và hỏi đáp tức thì qua chat.</p>
-        <div class="hero-cta">
-          <button class="btn btn-primary btn-lg" data-auth="register" data-role="student"><i data-lucide="graduation-cap"></i> Tôi là học sinh</button>
-          <button class="btn btn-outline btn-lg" data-auth="register" data-role="teacher"><i data-lucide="presentation"></i> Tôi là giáo viên</button>
-        </div>
-        <div class="hero-proof">
-          <div class="avatars">
-            <span style="background:#5b4cf5">MA</span><span style="background:#f43f6e">GB</span><span style="background:#ff8a3d">TH</span><span style="background:#12b981">+</span>
+  <header class="h-hero">
+    <div class="h-wrap h-hero-grid">
+      <div class="h-hero-text">
+        <h1 class="reveal">
+          <span class="h-line">Speak English.</span>
+          <span class="h-line"><span class="h-rotate" id="rotWord" aria-live="polite">Live.</span></span>
+        </h1>
+        <p class="h-lead reveal">Học trực tiếp cùng giáo viên. Slide, trò chơi và trợ lý AI trong một lớp.</p>
+
+        <!-- Ô tài khoản: chưa có thì đăng ký, đã có thì đăng nhập -->
+        <div class="h-account reveal" id="start">
+          <div class="h-account-q">
+            <span class="h-account-ic">👋</span>
+            <div><b>Bạn có tài khoản chưa?</b><small>Miễn phí · chưa đến 1 phút</small></div>
           </div>
-          Học viên đang luyện nói mỗi ngày
+          <div class="h-account-roles">
+            <button class="h-role" data-auth="register" data-role="student"><span>🧑‍🎓</span>Học sinh</button>
+            <button class="h-role" data-auth="register" data-role="teacher"><span>👩‍🏫</span>Giáo viên</button>
+          </div>
+          <div class="h-account-row">
+            <button class="h-btn h-primary h-lg" data-auth="register"><i data-lucide="sparkles"></i> Tạo tài khoản</button>
+            <button class="h-btn h-glow h-lg" data-auth="login"><i data-lucide="log-in"></i> Đăng nhập</button>
+          </div>
         </div>
       </div>
 
-      <div class="hero-visual">
-        <div class="hero-blob"></div>
-        <div class="mock-live">
-          <div class="mock-screen">
-            <div class="mock-tag"><span class="badge-live">LIVE</span><span class="badge-dark"><i data-lucide="users"></i> 24</span></div>
-            <div class="teacher-avatar">👩‍🏫</div>
-            <div class="mock-word">
-              <small>Word of the moment</small>
-              <b>confident</b>
-              <small style="color:var(--primary)">/ˈkɒn.fɪ.dənt/ · tự tin</small>
-            </div>
+      <!-- Mô phỏng lớp học trực tiếp (vẽ bằng CSS, không dùng ảnh ngoài) -->
+      <div class="h-stage reveal" id="stageTilt" aria-hidden="true">
+        <div class="h-screen">
+          <div class="h-screen-top"><span class="h-badge-live">● LIVE</span><span class="h-badge-dark"><i data-lucide="users"></i> <b class="count" data-to="28">0</b></span><span class="h-badge-dark rec">⏺ REC</span></div>
+          <div class="h-teacher">
+            <span class="h-ring r1"></span><span class="h-ring r2"></span>
+            <span class="h-face">👩‍🏫</span>
+            <div class="h-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
+          <div class="h-slide">
+            <small>Word of the day</small>
+            <b>confident</b>
+            <span>/ˈkɒn.fɪ.dənt/ · tự tin</span>
+          </div>
+          <div class="h-poll">
+            <small>Quick quiz · 12s</small>
+            <div class="h-bar"><span>A. travel</span><i style="--w:72%"></i></div>
+            <div class="h-bar"><span>B. cook</span><i style="--w:18%"></i></div>
+            <div class="h-bar"><span>C. sleep</span><i style="--w:10%"></i></div>
+          </div>
+          <div class="h-react"><span>👏</span><span>❤️</span><span>🎉</span><span>😂</span><span>👍</span></div>
         </div>
-        <div class="float-card float-1"><span class="ic tone-mint"><i data-lucide="mic"></i></span><div>Pronunciation<small>Luyện phát âm chuẩn</small></div></div>
-        <div class="float-card float-2"><span class="ic tone-orange">✋</span><div>Gia Bảo giơ tay<small>"Can you repeat that?"</small></div></div>
-        <div class="float-card float-3"><span class="ic tone-pink"><i data-lucide="message-circle"></i></span><div>Chat realtime<small>Hỏi đáp tức thì</small></div></div>
+        <div class="h-float f1"><span class="h-fic mint"><i data-lucide="mic"></i></span><div><b>Pronunciation</b><small>98% chính xác</small></div></div>
+        <div class="h-float f2"><span class="h-fic orange">✋</span><div><b>Gia Bảo giơ tay</b><small>"Can you repeat?"</small></div></div>
+        <div class="h-float f3"><span class="h-fic violet"><i data-lucide="bot"></i></span><div><b>Hỏi AI</b><small>Giải thích ngay</small></div></div>
+        <div class="h-chat">
+          <div class="h-msg m1">Good morning teacher! ☀️</div>
+          <div class="h-msg m2 me">Let's start! 🚀</div>
+          <div class="h-msg m3">I got 10/10 🎉</div>
+        </div>
       </div>
     </div>
+    <a class="h-scroll" href="#features" aria-label="Xem thêm"><span></span></a>
   </header>
 
-  <section class="logos">
-    <div class="container logos-row"><span>IELTS</span><span>TOEIC</span><span>Cambridge</span><span>Business English</span><span>Kids English</span></div>
-  </section>
-
-  <section class="section" id="features">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">Tính năng</span>
-        <h2>Mọi thứ bạn cần cho một lớp tiếng Anh trực tuyến</h2>
-        <p>Thiết kế riêng cho việc dạy và học ngôn ngữ — đơn giản, nhanh và tương tác.</p>
-      </div>
-      <div class="features">
-        <div class="feature"><div class="ic tone-pink"><i data-lucide="radio"></i></div><h3>Livestream chất lượng cao</h3><p>Giáo viên phát camera, micro hoặc chia sẻ màn hình slide bài giảng chỉ với một nút bấm.</p></div>
-        <div class="feature"><div class="ic tone-violet"><i data-lucide="shield-check"></i></div><h3>Lớp học riêng tư</h3><p>Chỉ học sinh có trong lớp mới được vào xem. Giáo viên duyệt, thêm hoặc mời học sinh rời lớp.</p></div>
-        <div class="feature"><div class="ic tone-orange"><i data-lucide="book-open-text"></i></div><h3>Thẻ từ vựng trên màn hình</h3><p>Ghim từ mới kèm phiên âm IPA, nghĩa và ví dụ — học sinh bấm nghe phát âm ngay lập tức.</p></div>
-        <div class="feature"><div class="ic tone-mint"><i data-lucide="message-square-text"></i></div><h3>Chat & câu hỏi nhanh</h3><p>Trao đổi bằng tiếng Anh với các câu mẫu như “Could you repeat that?” giúp học sinh tự tin hơn.</p></div>
-        <div class="feature"><div class="ic tone-sky"><i data-lucide="hand"></i></div><h3>Giơ tay phát biểu</h3><p>Học sinh giơ tay để đặt câu hỏi, giáo viên thấy ngay trong danh sách người xem.</p></div>
-        <div class="feature"><div class="ic tone-violet"><i data-lucide="chart-no-axes-column"></i></div><h3>Theo dõi chuyên cần</h3><p>Lưu lịch sử từng buổi học, số người tham gia và số buổi mỗi học sinh đã học.</p></div>
-      </div>
+  <!-- Dải chữ chạy -->
+  <div class="h-marquee" aria-hidden="true">
+    <div class="h-track">
+      <span>IELTS</span><span>✦</span><span>TOEIC</span><span>✦</span><span>Cambridge</span><span>✦</span><span>Business English</span><span>✦</span><span>Kids English</span><span>✦</span><span>Speaking</span><span>✦</span>
+      <span>IELTS</span><span>✦</span><span>TOEIC</span><span>✦</span><span>Cambridge</span><span>✦</span><span>Business English</span><span>✦</span><span>Kids English</span><span>✦</span><span>Speaking</span><span>✦</span>
     </div>
-  </section>
+  </div>
 
-  <section class="section" id="roles" style="padding-top:20px">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">Hai vai trò</span>
-        <h2>Một nền tảng, hai trải nghiệm</h2>
-      </div>
-      <div class="roles">
-        <div class="role-card teacher">
-          <span class="chip">👩‍🏫 Giáo viên</span>
-          <h3>Dạy học trực tiếp, quản lý lớp dễ dàng</h3>
-          <ul>
-            <li><i data-lucide="check"></i> Tạo lớp học và chia sẻ mã lớp</li>
-            <li><i data-lucide="check"></i> Duyệt học sinh, thêm bằng email</li>
-            <li><i data-lucide="check"></i> Mở livestream, chia sẻ màn hình, ghim từ vựng</li>
-            <li><i data-lucide="check"></i> Xem ai đang học, ai đang giơ tay</li>
-          </ul>
-          <button class="btn" data-auth="register" data-role="teacher">Tạo tài khoản giáo viên <i data-lucide="arrow-right"></i></button>
+  <section class="h-section" id="features">
+    <div class="h-wrap">
+      <h2 class="h-title reveal">Một lớp học. <span class="h-grad">Đủ mọi thứ.</span></h2>
+      <div class="h-bento">
+        <div class="h-tile big t-live reveal">
+          <div class="h-tile-art live-art"><span class="dot"></span><span class="dot"></span><span class="dot"></span><i></i></div>
+          <span class="h-tile-ic pink"><i data-lucide="radio"></i></span>
+          <h3>Livestream</h3><p>Camera · màn hình · âm thanh</p>
         </div>
-        <div class="role-card student">
-          <span class="chip">🧑‍🎓 Học sinh</span>
-          <h3>Vào lớp đúng giờ, học như ngồi trong lớp</h3>
-          <ul>
-            <li><i data-lucide="check"></i> Nhận thông báo khi lớp bắt đầu live</li>
-            <li><i data-lucide="check"></i> Xin vào lớp bằng mã của giáo viên</li>
-            <li><i data-lucide="check"></i> Nghe giảng, chat và giơ tay hỏi bài</li>
-            <li><i data-lucide="check"></i> Nghe phát âm từ vựng mỗi buổi</li>
-          </ul>
-          <button class="btn" data-auth="register" data-role="student">Tạo tài khoản học sinh <i data-lucide="arrow-right"></i></button>
+        <div class="h-tile t-ai reveal">
+          <span class="h-tile-ic violet"><i data-lucide="wand-sparkles"></i></span>
+          <h3>AI soạn bài</h3><p>PDF → slide + trò chơi</p>
+          <div class="h-typing"><span></span><span></span><span></span></div>
+        </div>
+        <div class="h-tile t-game reveal">
+          <span class="h-tile-ic orange"><i data-lucide="gamepad-2"></i></span>
+          <h3>Trò chơi</h3><p>Quiz · nối · xếp câu</p>
+          <div class="h-chips"><span>A</span><span>B</span><span class="ok">C</span><span>D</span></div>
+        </div>
+        <div class="h-tile t-word reveal">
+          <span class="h-tile-ic mint"><i data-lucide="book-open-text"></i></span>
+          <h3>Tra từ 1 chạm</h3><p>Phát âm · nghĩa · lưu</p>
+        </div>
+        <div class="h-tile t-bot reveal">
+          <span class="h-tile-ic sky"><i data-lucide="bot"></i></span>
+          <h3>Trợ lý AI 24/7</h3><p>Hỏi bằng chữ, ảnh, tệp</p>
+        </div>
+        <div class="h-tile wide t-hw reveal">
+          <span class="h-tile-ic violet"><i data-lucide="clipboard-check"></i></span>
+          <h3>Bài tập tự chấm</h3><p>8 dạng bài · thống kê từng câu</p>
+          <div class="h-meter"><i style="--w:86%"></i></div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="how">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">Cách học</span>
-        <h2>Bắt đầu chỉ trong 3 bước</h2>
-      </div>
-      <div class="steps">
-        <div class="step"><h3>Giáo viên tạo lớp</h3><p>Tạo lớp theo trình độ (A1 – C2) và chia sẻ mã lớp hoặc thêm học sinh bằng email.</p></div>
-        <div class="step"><h3>Học sinh vào lớp</h3><p>Nhập mã lớp và chờ giáo viên duyệt. Chỉ thành viên của lớp mới xem được livestream.</p></div>
-        <div class="step"><h3>Học trực tiếp</h3><p>Khi giáo viên lên sóng, nút “Vào học ngay” xuất hiện tức thì trên trang của học sinh.</p></div>
+  <section class="h-section h-stats-sec">
+    <div class="h-wrap h-stats">
+      <div class="h-stat reveal"><b class="count" data-to="8">0</b><span>dạng bài tập</span></div>
+      <div class="h-stat reveal"><b class="count" data-to="30">0</b><span>học sinh / lớp</span></div>
+      <div class="h-stat reveal"><b>24/7</b><span>trợ lý AI</span></div>
+      <div class="h-stat reveal"><b class="count" data-to="1">0</b><span>chạm để vào lớp</span></div>
+    </div>
+  </section>
+
+  <section class="h-section" id="how">
+    <div class="h-wrap">
+      <h2 class="h-title reveal">3 bước. <span class="h-grad">Vào học.</span></h2>
+      <div class="h-steps">
+        <div class="h-step reveal"><span class="h-step-n">1</span><span class="h-step-ic">🏫</span><h3>Tạo lớp</h3><p>Giáo viên mở lớp, gửi mã</p></div>
+        <div class="h-step reveal"><span class="h-step-n">2</span><span class="h-step-ic">🔑</span><h3>Nhập mã</h3><p>Học sinh xin vào lớp</p></div>
+        <div class="h-step reveal"><span class="h-step-n">3</span><span class="h-step-ic">🎥</span><h3>Học live</h3><p>Bấm "Vào học" khi lên sóng</p></div>
       </div>
     </div>
   </section>
 
-  <section class="section" style="padding-top:0">
-    <div class="container">
-      <div class="cta-band">
-        <div>
-          <h2>Ready to speak English<br />with confidence? 🚀</h2>
-          <p>Tạo tài khoản miễn phí và tham gia buổi học đầu tiên ngay hôm nay.</p>
+  <section class="h-section">
+    <div class="h-wrap">
+      <div class="h-cta reveal">
+        <div class="h-cta-glow" aria-hidden="true"></div>
+        <h2>Ready to speak? <span>🚀</span></h2>
+        <p>Bạn có tài khoản chưa?</p>
+        <div class="h-account-row center">
+          <button class="h-btn h-primary h-lg" data-auth="register"><i data-lucide="sparkles"></i> Tạo tài khoản</button>
+          <button class="h-btn h-glow h-lg" data-auth="login"><i data-lucide="log-in"></i> Đăng nhập</button>
         </div>
-        <button class="btn btn-accent btn-lg" data-auth="register">Bắt đầu ngay</button>
       </div>
     </div>
   </section>
 
-  <footer class="footer">
-    <div class="container">
-      <a href="/" class="brand" style="font-size:18px"><span class="brand-mark" style="width:32px;height:32px"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
+  <footer class="h-footer">
+    <div class="h-wrap h-footer-in">
+      <a href="/" class="h-brand small"><span class="h-mark"><i data-lucide="radio"></i></span><span>Eng<b>Live</b></span></a>
       <span>© 2026 EngLive · Learn English, live.</span>
     </div>
   </footer>

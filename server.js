@@ -80,9 +80,31 @@ function liveInfo(classId) {
   return { title: live.title, startedAt: live.startedAt, viewers: live.viewers.size, teacherOnline: !!live.teacherSocket, provider: live.video?.provider || (lk.enabled ? 'livekit' : 'p2p') };
 }
 
+// Tóm tắt cho thẻ lớp: buổi học sắp tới, bài tập, lần dạy gần nhất (thẻ lớp hiện nhiều thông tin hơn)
+function nextSchedule(classId) {
+  const now = Date.now();
+  const s = db().schedules.filter((x) => x.classId === classId && x.endsAt > now).sort((a, b) => a.startsAt - b.startsAt)[0];
+  return s ? { title: s.title, startsAt: s.startsAt, endsAt: s.endsAt } : null;
+}
+function teacherSummary(c) {
+  const now = Date.now();
+  const hw = db().assignments.filter((a) => a.classId === c.id);
+  const ids = new Set(hw.map((a) => a.id));
+  const toGrade = db().submissions.filter((s) => ids.has(s.assignmentId) && !s.gradedAt).length;
+  const last = c.history[0];
+  return { next: nextSchedule(c.id), openAssignments: hw.filter((a) => a.dueAt > now).length, toGrade, lastSessionAt: last ? last.endedAt || last.startedAt : null, lastAttendance: last ? (last.attendees || []).length : null };
+}
+function studentSummary(c, userId) {
+  const now = Date.now();
+  const mine = new Set(db().submissions.filter((s) => s.userId === userId).map((s) => s.assignmentId));
+  const todo = db().assignments.filter((a) => a.classId === c.id && a.dueAt > now && !mine.has(a.id)).sort((a, b) => a.dueAt - b.dueAt);
+  const last = c.history[0];
+  return { next: nextSchedule(c.id), homeworkTodo: todo.length, homeworkDue: todo.length ? todo[0].dueAt : null, lastSessionAt: last ? last.endedAt || last.startedAt : null };
+}
+
 function classForTeacher(c) {
   return {
-    ...c, maxStudents: capacity.limit(c),
+    ...c, maxStudents: capacity.limit(c), summary: teacherSummary(c),
     students: c.studentIds.map(findUser).filter(Boolean).map(publicUser),
     pending: c.pendingIds.map(findUser).filter(Boolean).map(publicUser),
     live: liveInfo(c.id),
@@ -104,6 +126,7 @@ function classForStudent(c, userId) {
     live: isMember ? liveInfo(c.id) : null,
     attended: c.history.filter((h) => (h.attendees || []).includes(userId)).length,
     sessions: c.history.length,
+    summary: isMember ? studentSummary(c, userId) : null,
   };
 }
 

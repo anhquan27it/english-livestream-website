@@ -157,24 +157,31 @@ Kế hoạch và tiến độ chi tiết: [PROJECT.md](PROJECT.md).
 
 ## Cho bạn bè test qua link tạm
 
-### Tự chạy khi đăng nhập Windows
+### Bấm file để chia sẻ web (mặc định)
 
-Chạy PowerShell trong thư mục dự án (cần Node.js và `cloudflared` trong PATH):
+Đã gỡ tự khởi động Windows theo yêu cầu. Cần Node.js và `cloudflared` trong PATH.
+
+1. Chạy `npm start` ở PowerShell có cấu hình LiveKit/AI của bạn.
+2. Bấm đúp **MO-LINK-WEB.cmd** trong thư mục dự án.
+3. Đợi link hiện trong cửa sổ Cloudflare; mở **LINK-WEB.txt** ngay cùng folder để sao chép.
+4. Giữ cửa sổ này mở. Ctrl+C để dừng tunnel; cửa sổ `npm start` của bạn vẫn chạy.
+
+File dùng chế độ `-Manual`, không tự chạy Node.js, không tạo server web ẩn, không đăng ký Startup. Nếu web chưa mở thì báo chạy npm start trước. Link mới thay vào LINK-WEB.txt mỗi lần tạo tunnel; lúc dừng thì tệp ghi trạng thái đã tắt để tránh chia sẻ link cũ. LINK-WEB.txt không commit vào Git. Log chi tiết vẫn trong data/tunnel/.
+
+Lệnh tương đương và công cụ xem/dừng:
 
 ```powershell
-# Cài tự chạy sau khi đăng nhập Windows
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Install
-# Bật ngay ở nền
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Start -Background
+# Bật tunnel thủ công, không tự mở web
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Start -Manual
 # Xem link HTTPS hiện tại
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Status
-# Dừng tunnel và server do launcher tự mở; giữ server có sẵn
+# Dừng tunnel; chế độ Manual không sở hữu web server
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Stop
 # Gỡ tự khởi động; không dừng phiên đang chạy
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Uninstall
 ```
 
-Launcher dùng lại server khỏe ở cổng 3000, chỉ mở `node server.js` nếu cổng trống; không đụng server có sẵn. Mutex tránh chạy trùng; tunnel tự thử lại khi tiến trình thoát. Link/log ở `data/tunnel/` (ngoài Git): `link.txt`, `Open EngLive.url`, `launcher.log`, `web-error.log`, `cloudflared-error.log`. Đợi khoảng 15–60 giây sau sign-in rồi xem link. Di chuyển thư mục dự án phải cài lại shortcut Startup.
+Mutex tránh chạy trùng; tunnel tự thử lại khi tiến trình thoát. Không cần bật lại chế độ Install/Background cũ.
 
 Link miễn phí là hostname ngẫu nhiên, đổi khi tạo tunnel mới. Máy phải bật, không sleep và có mạng. Không tự chạy 9Router hoặc LiveKit self-host, không lưu khóa trong terminal cũ. Quick Tunnel không hỗ trợ SSE; AI streaming dùng SSE cần kiểm tra riêng. Không tự đổi OAuth callback Zoom: liên kết từ máy khác cần callback công khai trùng trong Zoom/EngLive, và cập nhật lại khi hostname đổi. Chỉ chia sẻ cho nhóm thử tin cậy nếu còn demo/admin 123456. Xem [giới hạn Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 

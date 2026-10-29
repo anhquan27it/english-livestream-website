@@ -4,8 +4,8 @@ addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8));
 
 function authModal(mode = 'login', role = 'student') {
   const m = openModal(`
-    <h3 id="authTitle"></h3><p class="sub" id="authSub"></p>
-    <div class="tabs"><button data-tab="login">Đăng nhập</button><button data-tab="register">Đăng ký</button></div>
+    <div class="auth-hero"><span class="auth-badge" aria-hidden="true"><i data-lucide="radio"></i></span><h3 id="authTitle"></h3><p class="sub" id="authSub"></p></div>
+    <div class="tabs auth-tabs" id="authTabs"><span class="auth-tab-ind" aria-hidden="true"></span><button data-tab="login"><i data-lucide="log-in"></i> Đăng nhập</button><button data-tab="register"><i data-lucide="user-plus"></i> Đăng ký</button></div>
     <form id="authForm" novalidate>
       <div data-reg>
         <div class="role-pick">
@@ -29,12 +29,14 @@ function authModal(mode = 'login', role = 'student') {
         <button type="button" data-admin-login="admin@englive.local">🛡️ Admin · admin@englive.local</button>
       </div>
     </div>`);
+  m.querySelector('.modal').classList.add('auth-modal');
   const form = m.querySelector('#authForm');
   form.role.value = role;
 
   function setMode(next) {
     mode = next;
     m.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === mode));
+    m.querySelector('#authTabs').dataset.mode = mode;
     m.querySelectorAll('[data-reg]').forEach((el) => (el.hidden = mode !== 'register'));
     m.querySelectorAll('[data-login]').forEach((el) => (el.hidden = mode !== 'login'));
     m.querySelector('#authTitle').textContent = mode === 'login' ? 'Welcome back! 👋' : 'Tạo tài khoản mới ✨';
@@ -77,3 +79,46 @@ function authModal(mode = 'login', role = 'student') {
 document.querySelectorAll('[data-auth]').forEach((b) => (b.onclick = () => authModal(b.dataset.auth, b.dataset.role)));
 if (new URLSearchParams(location.search).has('login')) authModal('login');
 icons();
+
+// ----- Hiệu ứng trang chủ -----
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Hiện dần khi cuộn tới; số đếm chạy lên khi hiện
+const countUp = (el) => {
+  const to = +el.dataset.to || 0, start = performance.now(), dur = 1400;
+  const tick = (t) => { const p = Math.min(1, (t - start) / dur); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); };
+  if (reduceMotion) el.textContent = to; else requestAnimationFrame(tick);
+};
+const seen = new IntersectionObserver((entries) => entries.forEach((e) => {
+  if (!e.isIntersecting) return;
+  e.target.classList.add('in');
+  e.target.querySelectorAll('.count').forEach(countUp);
+  if (e.target.classList.contains('count')) countUp(e.target);
+  seen.unobserve(e.target);
+}), { threshold: 0.15 });
+document.querySelectorAll('.reveal').forEach((el, i) => { el.style.setProperty('--d', (i % 4) * 0.08 + 's'); seen.observe(el); });
+
+// Chữ đổi luân phiên trong tiêu đề
+const rot = document.getElementById('rotWord');
+if (rot && !reduceMotion) {
+  const words = ['Live.', 'Every day.', 'With friends.', 'Confidently.'];
+  let k = 0;
+  setInterval(() => { k = (k + 1) % words.length; rot.classList.remove('swap'); void rot.offsetWidth; rot.textContent = words[k]; rot.classList.add('swap'); }, 2600);
+}
+
+// Màn hình lớp học nghiêng theo chuột
+const stage = document.getElementById('stageTilt');
+const screen = stage && stage.querySelector('.h-screen');
+if (screen && !reduceMotion && matchMedia('(hover: hover)').matches) {
+  stage.addEventListener('mousemove', (e) => {
+    const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+    screen.style.transform = `rotateY(${-12 + x * 16}deg) rotateX(${6 - y * 12}deg)`;
+  });
+  stage.addEventListener('mouseleave', () => { screen.style.transform = ''; });
+}
+
+// Ô tính năng: vệt sáng đi theo chuột
+document.querySelectorAll('.h-tile').forEach((t) => t.addEventListener('mousemove', (e) => {
+  const r = t.getBoundingClientRect();
+  t.style.setProperty('--mx', e.clientX - r.left + 'px'); t.style.setProperty('--my', e.clientY - r.top + 'px');
+}));

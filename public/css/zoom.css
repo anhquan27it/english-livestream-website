@@ -4,8 +4,8 @@
 #zoomHost[hidden] { display: none; }
 #zoomFrame { border: 0; width: 100%; flex: 1 1 auto; min-height: 0; }
 /* Thanh kéo của khung Zoom nhỏ: kéo để di chuyển, − / + đổi cỡ (chỉ hiện khi Zoom đang là khung nhỏ) */
-.zoom-grip { display: none; flex: none; height: 24px; align-items: center; gap: 4px; padding: 0 4px; background: #0b0a1d; }
-.zg-drag { flex: 1; height: 100%; display: grid; place-items: center; cursor: grab; color: #9a97c4; touch-action: none; user-select: none; }
+.zoom-grip { display: none; flex: none; height: 24px; align-items: center; gap: 4px; padding: 0 4px; background: #150f0b; }
+.zg-drag { flex: 1; height: 100%; display: grid; place-items: center; cursor: grab; color: #b48a67; touch-action: none; user-select: none; }
 .zg-drag:active { cursor: grabbing; }
 .zg-drag svg { width: 16px; height: 16px; }
 .zoom-grip button { width: 22px; height: 20px; border: 0; border-radius: 6px; background: rgba(255, 255, 255, .12); color: #fff; display: grid; place-items: center; cursor: pointer; padding: 0; }
@@ -22,12 +22,12 @@
 .stage.zoom-mode.with-slide[data-zl="zoom"] #zoomHost { inset: 0; width: auto; height: 100%; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; z-index: 3; }
 .stage.zoom-mode.with-slide[data-zl="zoom"] .slide-layer { inset: auto 16px 16px auto; width: min(34%, 340px); height: auto; aspect-ratio: 16 / 9; padding: 0; z-index: 6; }
 .stage.zoom-mode.with-slide[data-zl="zoom"] .slide-layer .sl-in { padding: 8px; }
-.stage.zoom-mode.with-slide[data-zl="split"] #zoomHost { inset: 0 0 0 auto; width: var(--zw, 45%); height: auto; aspect-ratio: auto; border-radius: 0; border: 0; border-left: 2px solid #45416a; box-shadow: none; }
+.stage.zoom-mode.with-slide[data-zl="split"] #zoomHost { inset: 0 0 0 auto; width: var(--zw, 45%); height: auto; aspect-ratio: auto; border-radius: 0; border: 0; border-left: 2px solid #6f533c; box-shadow: none; }
 .stage.zoom-mode.with-slide[data-zl="split"] .slide-layer { inset: 0 var(--zw, 45%) 0 0; }
 /* Chia đôi cân bằng: kéo thanh ở giữa để đổi tỉ lệ slide | Zoom; bấm đúp để chuyển nhanh 45% ↔ 65% */
 .zoom-splitter { display: none; position: absolute; top: 0; bottom: 0; right: var(--zw, 45%); width: 14px; margin-right: -7px; z-index: 8; cursor: col-resize; touch-action: none; }
-.zoom-splitter::after { content: ''; position: absolute; left: 5px; top: 50%; width: 4px; height: 56px; margin-top: -28px; border-radius: 4px; background: rgba(120, 112, 200, .65); transition: background .15s; }
-.zoom-splitter:hover::after, .stage.zsplit-drag .zoom-splitter::after { background: var(--accent, #7c6cff); }
+.zoom-splitter::after { content: ''; position: absolute; left: 5px; top: 50%; width: 4px; height: 56px; margin-top: -28px; border-radius: 4px; background: rgba(195, 124, 66, .65); transition: background .15s; }
+.zoom-splitter:hover::after, .stage.zsplit-drag .zoom-splitter::after { background: var(--accent, #ff8626); }
 .stage.zoom-mode.with-slide[data-zl="split"] .zoom-splitter { display: block; }
 .stage.zoom-mode .swap-btn { display: none !important; } /* bố cục chọn bằng các nút ở thanh điều khiển */
 @media (max-width: 900px) {
@@ -35,7 +35,7 @@
   .stage.zoom-mode.with-slide:not([data-zl]) #zoomHost, .stage.zoom-mode.with-slide[data-zl="pip"] #zoomHost { width: clamp(150px, 44%, 260px); right: 10px; bottom: 10px; }
   .stage.zoom-mode.with-slide[data-zs="s"]:not([data-zl="zoom"]):not([data-zl="split"]) #zoomHost { width: clamp(120px, 30%, 170px); }
   .stage.zoom-mode.with-slide[data-zs="l"]:not([data-zl="zoom"]):not([data-zl="split"]) #zoomHost { width: 80%; }
-  .stage.zoom-mode.with-slide[data-zl="split"] #zoomHost { inset: auto 0 0 0; width: auto; height: 50%; border-left: 0; border-top: 2px solid #45416a; }
+  .stage.zoom-mode.with-slide[data-zl="split"] #zoomHost { inset: auto 0 0 0; width: auto; height: 50%; border-left: 0; border-top: 2px solid #6f533c; }
   .stage.zoom-mode.with-slide[data-zl="split"] { height: 64dvh !important; }
   .stage.zoom-mode.with-slide[data-zl="split"] .zoom-splitter { display: none; }
   .stage.zoom-mode.with-slide[data-zl="split"] .slide-layer { inset: 0 0 50% 0; }

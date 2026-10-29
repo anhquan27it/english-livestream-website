@@ -9,29 +9,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/classes.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
   <div class="app">
     <aside class="sidebar" id="sidebar"></aside>
 
     <main class="main" id="overview">
-      <div class="topbar">
-        <div style="display:flex;gap:12px;align-items:center">
-          <button class="icon-btn mobile-only" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
-          <div>
-            <h1 id="hello"></h1>
-            <p>Sẵn sàng cho buổi dạy hôm nay chưa?</p>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <button class="btn btn-outline" id="zoomConnectBtn">Liên kết Zoom một lần</button>
-          <button class="btn btn-primary" id="newClassBtn"><i data-lucide="plus"></i> Tạo lớp mới</button>
-        </div>
+      <div class="mbar">
+        <button class="icon-btn" data-menu aria-label="Menu"><i data-lucide="menu"></i></button>
+        <a href="/" class="brand"><span>Eng<b>Live</b></span></a>
+        <button class="btn btn-primary btn-sm" id="newClassBtn"><i data-lucide="plus"></i> Tạo lớp</button>
       </div>
 
       <section id="classCollection">
       <div class="stats" id="stats"></div>
-      <div class="section-title" id="classes"><h2>Lớp học của tôi</h2></div>
+      <div class="section-title" id="classes"><h2>Lớp học của tôi</h2><button class="btn btn-outline btn-sm" id="zoomConnectBtn" title="Liên kết tài khoản Zoom một lần để mở cuộc họp ngay trong web"><i data-lucide="link"></i> Liên kết Zoom</button></div>
       <div id="classTools"></div>
       <div class="class-grid" id="classGrid"></div>
       <nav class="catalog-pagination" id="classPagination" aria-label="Phân trang lớp học"></nav>

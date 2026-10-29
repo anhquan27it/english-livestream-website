@@ -6,7 +6,7 @@ class ClassDirectory {
     this.items = [];
     this.page = 1;
     this.size = 12;
-    this.view = role === 'teacher' ? 'list' : 'grid';
+    this.view = 'grid';
     this.host = document.getElementById('classTools');
     this.host.innerHTML = `
       <div class="catalog-filters">
@@ -89,3 +89,33 @@ class ClassDirectory {
     icons();
   }
 }
+
+// ----- Thẻ lớp dùng chung (học sinh + giáo viên): ngày giờ dễ đọc, ô số liệu, thanh tiến độ -----
+const ClassTile = {
+  when(ts) {
+    if (!ts) return '';
+    const d = new Date(ts), now = new Date(), day = 86400000;
+    const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((start(d) - start(now)) / day);
+    const hm = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    if (diff === 0) return 'Hôm nay ' + hm;
+    if (diff === 1) return 'Ngày mai ' + hm;
+    if (diff === -1) return 'Hôm qua ' + hm;
+    const wd = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+    return `${wd} ${d.getDate()}/${d.getMonth() + 1} · ${hm}`;
+  },
+  // Chỉ ngày (không giờ): Hôm nay / Hôm qua / T2 4/11
+  day(ts) { return ClassTile.when(ts).replace(/^(Hôm nay|Ngày mai|Hôm qua) .*$/, '$1').replace(/ · .*$/, ''); },
+  stat(icon, value, label, tone = '', attrs = '') {
+    return `<div class="cs ${tone}" ${attrs}><span class="cs-ic"><i data-lucide="${icon}"></i></span><div><b>${value}</b><small>${label}</small></div></div>`;
+  },
+  bar(label, done, total) {
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return `<div class="ctile-progress"><div class="ctile-progress-row"><span>${label}</span><b>${done}/${total}${total ? ' · ' + pct + '%' : ''}</b></div><div class="ctile-bar"><i style="width:${pct}%"></i></div></div>`;
+  },
+  next(n, liveTitle) {
+    if (liveTitle) return `<div class="ctile-next live"><i data-lucide="radio"></i><span>Đang live: <b>${esc(liveTitle)}</b></span></div>`;
+    return n ? `<div class="ctile-next"><i data-lucide="calendar-clock"></i><span>Buổi tới: <b>${esc(ClassTile.when(n.startsAt))}</b>${n.title ? ' · ' + esc(n.title) : ''}</span></div>`
+      : '<div class="ctile-next muted"><i data-lucide="calendar-x"></i><span>Chưa có lịch học sắp tới</span></div>';
+  },
+};
