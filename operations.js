@@ -5,6 +5,7 @@ const path = require('path');
 const store = require('./db');
 const capacity = require('./class-capacity');
 const videoProvider = require('./video');
+const exercises = require('./exercises');
 const text = (v, n = 200) => String(v == null ? '' : v).trim().slice(0, n);
 const manager = (u, c) => u.role === 'admin' || c.teacherId === u.id || (c.assistantIds || []).includes(u.id);
 const active = u => u && !['pending', 'blocked'].includes(u.status);
@@ -136,9 +137,9 @@ function createRouter(ctx) {
     const ids = new Set(classes.map(c => c.id)), manageable = new Set(classes.filter(c => manager(req.user, c)).map(c => c.id));
     const assignments = db.assignments.filter(a => ids.has(a.classId));
     const assignmentIds = new Set(assignments.map(a => a.id));
-    res.json({ classes: classes.map(c => ({ id: c.id, name: c.name, canManage: manageable.has(c.id), teacherId: c.teacherId })),
-      schedules: db.schedules.filter(s => ids.has(s.classId)).sort((a, b) => a.startsAt - b.startsAt), assignments,
-      submissions: db.submissions.filter(s => assignmentIds.has(s.assignmentId) && (s.userId === req.user.id || manageable.has((assignments.find(a => a.id === s.assignmentId) || {}).classId))),
+    res.json({ classes: classes.map(c => ({ id: c.id, name: c.name, level: c.level, canManage: manageable.has(c.id), teacherId: c.teacherId })),
+      schedules: db.schedules.filter(s => ids.has(s.classId)).sort((a, b) => a.startsAt - b.startsAt), assignments: assignments.map(a => manageable.has(a.classId) ? a : exercises.publicAssignment(a)),
+      submissions: db.submissions.filter(s => assignmentIds.has(s.assignmentId) && (s.userId === req.user.id || manageable.has((assignments.find(a => a.id === s.assignmentId) || {}).classId))).map(s => { const a = assignments.find(x => x.id === s.assignmentId); return a && !manageable.has(a.classId) ? exercises.resultForStudent(a, s) : s; }),
       vocabulary: db.vocabulary.filter(v => v.userId === req.user.id),
       reports: classes.map(c => ({ classId: c.id, history: c.history.map(h => ({ id: h.id, hasReview: !!(h.reviewLessons && h.reviewLessons.length), title: h.title, startedAt: h.startedAt, endedAt: h.endedAt, attendance: manageable.has(c.id) ? Object.fromEntries(Object.entries(h.attendance || {}).map(([uid, a]) => [uid, a && { ...a, name: a.name || db.users.find(u => u.id === uid)?.name || '' }])) : { [req.user.id]: (h.attendance || {})[req.user.id] }, scores: (h.scores || []).filter(s => manageable.has(c.id) || s.userId === req.user.id) })) })),
       results: db.activityResults.filter(a => ids.has(a.classId)).map(a => ({ ...a, answers: a.answers.filter(s => manageable.has(a.classId) || s.userId === req.user.id) })),
@@ -167,14 +168,57 @@ function createRouter(ctx) {
   r.post('/api/learning/assignments', (req, res) => {
     const c = classManager(req, res); if (!c) return;
     const b = req.body || {}, title = text(b.title, 120), prompt = text(b.prompt, 5000), dueAt = Number(b.dueAt);
-    if (!title || !prompt || !Number.isFinite(dueAt) || dueAt <= Date.now()) return res.status(400).json({ error: 'Nhập tên, đề bài và hạn nộp trong tương lai.' });
-    const assignment = { id: store.id('hw'), classId: c.id, title, prompt, dueAt, createdAt: Date.now(), createdBy: req.user.id };
+    const parsed = exercises.normalizeItems(b.items);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    if (!title || (!prompt && !parsed.items.length) || !Number.isFinite(dueAt) || dueAt <= Date.now()) return res.status(400).json({ error: 'Nhập tên, đề bài (hoặc thêm câu hỏi) và hạn nộp trong tương lai.' });
+    const assignment = { id: store.id('hw'), classId: c.id, title, prompt, dueAt, createdAt: Date.now(), createdBy: req.user.id, items: parsed.items, settings: exercises.normalizeSettings(b.settings) };
     db.assignments.push(assignment); store.audit(req.user, 'assignment.create', assignment.id); res.json({ assignment });
+  });
+  const ownAssignment = (req, res) => { const a = db.assignments.find(x => x.id === req.params.id), c = a && findClass(a.classId); if (!c || !canAccess(req.user, c) || !manager(req.user, c)) { res.status(403).json({ error: 'Không có quyền quản lý bài tập này.' }); return null; } return a; };
+  r.patch('/api/learning/assignments/:id', (req, res) => {
+    const a = ownAssignment(req, res); if (!a) return;
+    const b = req.body || {};
+    if (b.title !== undefined) { const t = text(b.title, 120); if (!t) return res.status(400).json({ error: 'Tên bài không được trống.' }); a.title = t; }
+    if (b.prompt !== undefined) { const p = text(b.prompt, 5000); if (!p && !(a.items || []).length) return res.status(400).json({ error: 'Đề bài không được trống.' }); a.prompt = p; }
+    if (b.dueAt !== undefined) { const d = Number(b.dueAt); if (!Number.isFinite(d) || d <= Date.now()) return res.status(400).json({ error: 'Hạn nộp phải ở tương lai.' }); a.dueAt = d; }
+    store.audit(req.user, 'assignment.update', a.id); store.save(); res.json({ assignment: a });
+  });
+  r.delete('/api/learning/assignments/:id', (req, res) => {
+    const a = ownAssignment(req, res); if (!a) return;
+    db.assignments = db.assignments.filter(x => x !== a); db.submissions = db.submissions.filter(x => x.assignmentId !== a.id);
+    store.audit(req.user, 'assignment.delete', a.id); store.save(); res.json({ ok: true });
+  });
+  r.get('/api/learning/assignments/:id/stats', (req, res) => {
+    const a = ownAssignment(req, res); if (!a) return;
+    res.json({ stats: exercises.stats(a, db.submissions.filter(x => x.assignmentId === a.id)) });
+  });
+  // Soạn câu hỏi bằng AI để giáo viên xem lại/chỉnh sửa trước khi giao
+  r.post('/api/learning/assignments/generate', async (req, res) => {
+    const c = classManager(req, res); if (!c) return;
+    if (!store.consumeAI(req.user.id, 'generation')) return res.status(429).json({ error: 'Đã hết hạn mức soạn bằng AI hôm nay (UTC).' });
+    try {
+      const items = await exercises.generate({ topic: req.body.topic, level: req.body.level || c.level, count: req.body.count, types: req.body.types, source: req.body.source });
+      if (!items.length) return res.status(502).json({ error: 'AI chưa tạo được câu hỏi hợp lệ. Hãy thử lại hoặc đổi chủ đề.' });
+      res.json({ items });
+    } catch (e) { console.error('[exercise ai]', e.message); res.status(502).json({ error: 'Trợ lý AI đang bận hoặc chưa được cấu hình. ' + e.message }); }
   });
   r.post('/api/learning/assignments/:id/submit', (req, res) => {
     const a = db.assignments.find(a => a.id === req.params.id), c = a && findClass(a.classId);
     if (!c || req.user.role !== 'student' || !c.studentIds.includes(req.user.id)) return res.status(403).json({ error: 'Không có quyền nộp bài.' });
     if (Date.now() > a.dueAt) return res.status(409).json({ error: 'Đã hết hạn nộp.' });
+    if (a.items && a.items.length) {
+      const answers = exercises.cleanAnswers(a.items, (req.body || {}).answers);
+      if (!Object.keys(answers).length) return res.status(400).json({ error: 'Bạn chưa trả lời câu nào.' });
+      let sub = db.submissions.find(x => x.assignmentId === a.id && x.userId === req.user.id);
+      if (sub && (sub.attempts || 1) >= ((a.settings && a.settings.maxAttempts) || 1)) return res.status(409).json({ error: 'Bạn đã dùng hết số lần làm bài.' });
+      if (sub && sub.gradedAt && sub.gradedBy !== 'auto') return res.status(409).json({ error: 'Bài đã chấm, không thể ghi đè.' });
+      const g = exercises.gradeSubmission(a.items, answers);
+      if (!sub) { sub = { id: store.id('sub'), assignmentId: a.id, userId: req.user.id, name: req.user.name }; db.submissions.push(sub); }
+      const best = sub.gradedBy === 'auto' && typeof sub.score === 'number' ? sub.score : null;
+      Object.assign(sub, { answers, detail: g.detail, attempts: (sub.attempts || 0) + 1, autoPoints: g.autoPoints, autoMax: g.autoMax, manualMax: g.manualMax, needsManual: g.needsManual, autoScore: g.suggested, submittedAt: Date.now() });
+      if (!g.needsManual) Object.assign(sub, { score: best === null ? g.suggested : Math.max(best, g.suggested), feedback: sub.feedback || '', gradedAt: Date.now(), gradedBy: 'auto' }); // nhiều lần làm: lấy điểm cao nhất
+      store.save(); return res.json({ submission: exercises.resultForStudent(a, sub) });
+    }
     const content = text((req.body || {}).content, 10000); if (!content) return res.status(400).json({ error: 'Bài làm còn trống.' });
     let s = db.submissions.find(s => s.assignmentId === a.id && s.userId === req.user.id);
     if (s && s.gradedAt) return res.status(409).json({ error: 'Bài đã chấm, không thể ghi đè.' });

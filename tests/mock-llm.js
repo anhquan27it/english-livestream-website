@@ -42,6 +42,22 @@ function reply(messages) {
     const layout = (/layout: "(\w+)"/.exec(last) || [])[1];
     return JSON.stringify(sceneJson(type, title, layout, /Source excerpt for this scene/.test(last)));
   }
+  if (/EXERCISE GENERATOR/.test(system)) { // soạn bài tập bằng AI: mỗi dạng một câu mẫu (câu thứ 3 cố ý hỏng để thử bộ lọc)
+    const types = ((/Allowed types: ([\w, ]+)/.exec(last) || [])[1] || 'mcq').split(/,\s*/);
+    const count = +(/Number of items: (\d+)/.exec(last) || [])[1] || 3;
+    const demo = {
+      mcq: { type: 'mcq', q: 'Which word means "đi du lịch"?', options: ['travel', 'cook', 'sleep', 'paint'], answer: 0, explain: 'travel = đi du lịch' },
+      tf: { type: 'tf', q: 'The word "airport" means sân bay.', answer: true },
+      fill: { type: 'fill', text: 'I ___ to Japan last year.', blanks: [['went']] },
+      order: { type: 'order', answer: 'I am going to travel to Japan.' },
+      match: { type: 'match', q: 'Match.', pairs: [['airport', 'sân bay'], ['ticket', 'vé']] },
+      short: { type: 'short', q: 'What is the past of go?', answers: ['went'] },
+      essay: { type: 'essay', q: 'Write about your last trip.', minWords: 30 },
+      speak: { type: 'speak', target: 'Where is the departure gate?', q: 'Read aloud' },
+    };
+    const items = []; for (let i = 0; i < count; i++) items.push(i === 2 ? { type: 'mcq', q: 'Broken question without options' } : demo[types[i % types.length]] || demo.mcq);
+    return JSON.stringify({ items });
+  }
   // chat: phản hồi cho biết ngữ cảnh có đáp án hay không để test không lộ đáp án
   const correct = (system.match(/^Correct: /gm) || []).length;
   const bold = /bold/i.test(last) ? ' Try: **luggage** - hành lý. Please say: I lost my luggage.' : '';
