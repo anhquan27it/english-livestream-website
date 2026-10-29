@@ -89,8 +89,9 @@ function renderClassList(items) {
         </div>
     </article>`).join('') : `
     <div class="card empty" style="grid-column:1/-1"><div class="emoji">🎒</div><b>Bạn chưa tham gia lớp nào</b>Hỏi giáo viên mã lớp và nhập để xin vào lớp nhé.<br /><br />
-    <button class="btn btn-primary" onclick="joinClass()"><i data-lucide="key-round"></i> Nhập mã lớp</button></div>`;
+    <button class="btn btn-primary" data-join-empty><i data-lucide="key-round"></i> Nhập mã lớp</button></div>`;
   document.querySelectorAll('[data-rec]').forEach((b) => (b.onclick = () => openRecordings(b.dataset.rec, false)));
+  document.querySelectorAll('[data-join-empty]').forEach((b) => (b.onclick = () => joinClass()));
   icons();
 }
 

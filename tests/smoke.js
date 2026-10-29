@@ -715,6 +715,36 @@ async function main() {
     assert.equal((await look(T, { word: 'ticket' })).status, 200);
     assert.equal((await api(null, 'POST', '/api/ai/lookup', { word: 'ticket' })).status, 401);
   });
+  await test('header bảo mật (CSP, chống nhúng, nosniff) và giới hạn tốc độ chat/sự kiện socket', async () => {
+    const home = await fetch(BASE + '/');
+    const policy = home.headers.get('content-security-policy') || '';
+    assert.match(policy, /frame-ancestors 'self'/); assert.match(policy, /object-src 'none'/); assert.ok(!/script-src[^;]*unsafe-inline/.test(policy), 'không cho script inline');
+    assert.equal(home.headers.get('x-content-type-options'), 'nosniff'); assert.equal(home.headers.get('x-frame-options'), 'SAMEORIGIN');
+    assert.equal(home.headers.get('x-powered-by'), null);
+    assert.ok(!/<script>/.test(await home.text()), 'trang chủ không còn script inline');
+    assert.equal((await fetch(BASE + '/api/me', { headers: { Authorization: 'Bearer ' + S1 } })).headers.get('cache-control'), 'no-store');
+    const zoomPolicy = (await fetch(BASE + '/zoom-embed.html')).headers.get('content-security-policy');
+    assert.match(zoomPolicy, /frame-ancestors 'self'/); assert.ok(!/script-src/.test(zoomPolicy), 'trang nhúng Zoom cần tải SDK của Zoom');
+    // chat: tối đa 6 tin / 8 giây, cách nhau ≥ 350 ms
+    const cls = (await api(T, 'POST', '/api/classes', { name: 'Rate limit class' })).body.class;
+    assert.equal((await api(T, 'POST', '/api/classes/' + cls.id + '/students', { email: 'student1@demo.com' })).status, 200);
+    await api(T, 'POST', '/api/classes/' + cls.id + '/live', { title: 'Rate' });
+    const tsock = await connect(T), ssock = await connect(S1);
+    assert.ok((await emit(tsock, 'room:join', { classId: cls.id })).ok); assert.ok((await emit(ssock, 'room:join', { classId: cls.id })).ok);
+    let got = 0; tsock.on('chat', (m) => { if (!m.system) got++; });
+    const limited = nextEvent(ssock, 'chat:limited');
+    for (let i = 0; i < 40; i++) ssock.emit('chat', { text: 'spam ' + i });
+    assert.match((await limited).error, /nhanh/);
+    await sleep(500); assert.ok(got >= 1 && got <= 6, 'giáo viên chỉ nhận tối đa 6 tin, nhận ' + got);
+    // mọi sự kiện: quá nhanh thì bị bỏ và người gửi được báo
+    const flood = nextEvent(ssock, 'rate:limited', () => true, 6000);
+    for (let i = 0; i < 700; i++) ssock.emit('hand', { raised: i % 2 === 0 });
+    assert.ok((await flood).event);
+    const late = await emit(ssock, 'room:join', { classId: cls.id });
+    assert.match(late.error, /quá nhanh/); // ack vẫn được trả lời khi bị giới hạn
+    tsock.close(); ssock.close();
+    await api(T, 'DELETE', '/api/classes/' + cls.id + '/live');
+  });
   await test('hỏi đáp chung (không có bài) và lỗi AI không lộ chi tiết cho học sinh', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is present perfect?' });
     assert.equal(r.status, 200);

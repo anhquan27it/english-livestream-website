@@ -22,7 +22,11 @@ store.lock();
 store.applyAdminSetup();
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const security = require('./security');
+const io = new Server(server, { maxHttpBufferSize: 512 * 1024 }); // gói socket lớn nhất 512 KB
+
+app.disable('x-powered-by');
+app.use(security.headers({ getLivekitUrl: () => (lk.enabled ? lk.config.publicUrl : '') }));
 
 app.use(express.json({ limit: '2mb' }));
 app.use('/zoom-embed.html', (req, res, next) => { res.set({ 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' }); next(); });
@@ -463,6 +467,7 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
+  security.limitSocket(socket); // giới hạn tốc độ mọi sự kiện của kết nối này
   const user = socket.data.user;
   socket.join('user:' + user.id);
   const register = socket.on.bind(socket);
@@ -559,6 +564,7 @@ io.on('connection', (socket) => {
     if (!lives.has(classId)) return;
     const msg = String(text || '').trim().slice(0, 500);
     if (!msg) return;
+    if (!security.allowChat(socket)) return socket.emit('chat:limited', { error: 'Bạn gửi tin hơi nhanh, đợi vài giây rồi gửi tiếp nhé.' });
     io.to('live:' + classId).emit('chat', { name: user.name, role: user.role, userId: user.id, text: msg, at: Date.now() });
   });
 

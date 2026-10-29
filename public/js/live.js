@@ -99,6 +99,8 @@ async function init() {
   });
   socket.on('connect_error', () => toast('Mất kết nối máy chủ, đang thử lại...', 'error'));
   socket.on('chat', addChat);
+  socket.on('chat:limited', ({ error } = {}) => toast(error || 'Bạn gửi tin hơi nhanh.', 'error'));
+  socket.on('rate:limited', () => toast('Bạn thao tác quá nhanh, hãy chậm lại một chút.', 'error'));
   socket.on('viewers:count', (n) => { $('viewerCount').textContent = n; if (!isTeacher) $('peopleCount').textContent = words.length; });
   socket.on('word', showWord);
   socket.on('live:ended', ({ reason }) => finish('👋', 'Buổi học đã kết thúc', reason));

@@ -77,8 +77,9 @@ function renderClassList(items) {
   const grid = document.getElementById('classGrid');
   grid.innerHTML = classes.length ? items.map(classCard).join('') : `
     <div class="card empty" style="grid-column:1/-1"><div class="emoji">🏫</div><b>Bạn chưa có lớp học nào</b>Tạo lớp đầu tiên để mời học sinh và bắt đầu livestream.<br /><br />
-    <button class="btn btn-primary" onclick="newClass()"><i data-lucide="plus"></i> Tạo lớp mới</button></div>`;
+    <button class="btn btn-primary" data-new-empty><i data-lucide="plus"></i> Tạo lớp mới</button></div>`;
   grid.querySelectorAll('[data-manage]').forEach((b) => (b.onclick = () => manageClass(b.dataset.manage)));
+  grid.querySelectorAll('[data-new-empty]').forEach((b) => (b.onclick = () => newClass()));
   grid.querySelectorAll('[data-golive]').forEach((b) => (b.onclick = () => startLive(b.dataset.golive)));
 
 }
