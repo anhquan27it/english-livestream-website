@@ -58,6 +58,8 @@ SDK client view 6.2.0 được tải từ CDN chính thức của Zoom trong ifr
 | --- | --- |
 | Slide, game, điểm, chat EngLive, AI, bảng viết, PDF, xem lại slide | Giữ qua Socket.IO và API EngLive |
 | Mic, camera, share màn hình/âm thanh, phụ đề, breakout | Dùng UI Zoom, tùy quyền/gói/trình duyệt; không đồng bộ quyền mic/phòng nhóm với LiveKit |
+| Giơ tay, mời phát biểu, phụ đề, cảm xúc, tặng sao | Dùng trong EngLive như LiveKit. "Mời phát biểu" chỉ điều phối (học sinh nhận thông báo và tự bật mic trong Zoom; giáo viên thấy ai đang được mời) — micro/camera/chia sẻ của học sinh vẫn do Zoom quản lý. Phụ đề trực tiếp dùng nhận dạng giọng nói của trình duyệt giáo viên (Chrome/Edge) |
+| Ai đã vào Zoom | Bảng người xem của giáo viên hiện trạng thái từng học sinh: đang trong Zoom / đang chờ chủ trì / lỗi (bấm Kết nối Zoom) / đã rời |
 | Chuyên cần | Thời gian có mặt trong EngLive; chưa xác minh thời gian kết nối video Zoom |
 | Ghi hình | Ghi tab trên Chrome/Edge, cần chọn âm thanh tab và cho phép micro, lưu bằng upload của EngLive; chưa đồng bộ Zoom Cloud, chưa kiểm thử thiết bị thật |
 | Kick/kết thúc | Xóa quyền EngLive và rời iframe; chủ trì cần dùng Remove/End trong Zoom để chắc chắn xóa người/kết thúc cuộc họp. Đặc biệt khi host đang mở ứng dụng Zoom riêng |

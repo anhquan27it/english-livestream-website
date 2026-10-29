@@ -13,26 +13,26 @@ function init({ io, lives, present, lk }) {
 
   // Một học sinh được phát biểu tại một thời điểm
   async function setSpeaker(live, classId, socketId) {
-    if (live.video?.provider === 'zoom') return !socketId;
+    const zoom = live.video?.provider === 'zoom', useLk = !zoom && lk && lk.enabled; // Zoom: chỉ điều phối "mời phát biểu", micro do Zoom quản lý
     const revision = live.speakerRevision = (live.speakerRevision || 0) + 1;
     const prev = live.speaker;
     const userOf = (sid) => (live.viewers.get(sid) || {}).userId;
     if (prev && prev !== socketId) {
-      io.to(prev).emit('speak:revoked', { reason: 'Giáo viên đã thu lại micro.' });
-      if (lk && lk.enabled) lk.allowSpeaker(classId, userOf(prev), false);
+      io.to(prev).emit('speak:revoked', { reason: zoom ? 'Giáo viên đã thu lại lượt phát biểu. Hãy tắt micro trong Zoom.' : 'Giáo viên đã thu lại micro.' });
+      if (useLk) lk.allowSpeaker(classId, userOf(prev), false);
     }
     live.speaker = socketId || null;
     if (live.speaker !== prev) live.speakerPerms = { camera: false, screen: false };
     if (socketId) {
       // Với LiveKit: cấp quyền phát xong mới báo cho học sinh bật micro (tránh phát khi quyền chưa có hiệu lực)
       const userId = userOf(socketId);
-      const allowed = !lk || !lk.enabled || await lk.allowSpeaker(classId, userId, true, live.speakerPerms);
+      const allowed = !useLk || await lk.allowSpeaker(classId, userId, true, live.speakerPerms);
       if (revision !== live.speakerRevision || live.speaker !== socketId || !live.viewers.has(socketId)) {
-        if (lk && lk.enabled && userOf(live.speaker) !== userId) await lk.allowSpeaker(classId, userId, false);
+        if (useLk && userOf(live.speaker) !== userId) await lk.allowSpeaker(classId, userId, false);
         return false;
       }
       if (!allowed) { live.speaker = null; io.to(socketId).emit('speak:revoked', { reason: 'Máy chủ video chưa cấp được quyền micro. Hãy nhờ giáo viên thử lại.' }); }
-      else io.to(socketId).emit('speak:granted', { perms: { ...live.speakerPerms } });
+      else io.to(socketId).emit('speak:granted', { perms: { ...live.speakerPerms }, zoom });
     }
     io.to('live:' + classId).emit('speaker', speakerInfo(live));
     return !socketId || live.speaker === socketId;

@@ -86,6 +86,24 @@ module.exports = async ({ api, test, connect, emit, nextEvent, A, T, S1, S3, les
     }
     assert.equal((await emit(ts, 'breakout:start', { size: 2 })).error.includes('Zoom'), true);
   });
+  await test('Zoom: báo trạng thái vào phòng Zoom, mời/thu lượt phát biểu trong EngLive mà không đụng LiveKit', async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const seen = nextEvent(ts, 'viewer:zoom', e => e.state === 'joined');
+    ss.emit('zoom:state', { state: 'joined' });
+    const evt = await seen; assert.equal(evt.socketId, ss.id);
+    let bogus = false; const spy = () => { bogus = true; }; ts.on('viewer:zoom', spy);
+    ss.emit('zoom:state', { state: 'hacked' }); ts.emit('zoom:state', { state: 'joined' }); await wait(200); ts.off('viewer:zoom', spy);
+    assert.equal(bogus, false);
+    assert.equal((await emit(ts, 'room:join', { classId: c.id })).viewers.find(v => v.socketId === ss.id).zoom, 'joined');
+    const granted = nextEvent(ss, 'speak:granted'), info = nextEvent(ts, 'speaker', x => x && x.socketId === ss.id);
+    assert.ok((await emit(ts, 'speak:grant', { socketId: ss.id })).ok);
+    assert.equal((await granted).zoom, true); assert.equal((await info).name.length > 0, true);
+    assert.match((await emit(ts, 'speak:perms', { camera: true })).error, /Zoom/);
+    const revoked = nextEvent(ss, 'speak:revoked');
+    assert.ok((await emit(ts, 'speak:revoke', null)).ok);
+    assert.match((await revoked).reason, /Zoom/);
+    assert.ok((await api(S1, 'POST', '/api/livekit/token', { classId: c.id })).status === 409);
+  });
   await test('Zoom Basic không cho hai lớp chung phòng hoặc cùng chủ trì đồng thời', async () => {
     const assign = body => api(A, 'PUT', '/api/admin/video/meetings/' + second.id, { password: 'p', hostMode: 'desktop', ...body });
     await assign({ meetingNumber: '1234567890', hostEmail: 'other@test.com' });

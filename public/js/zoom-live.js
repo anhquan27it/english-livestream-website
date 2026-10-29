@@ -27,10 +27,11 @@ const ZoomLive = (() => {
           frame.contentWindow.postMessage({ type: 'zoom:join', credentials }, location.origin);
         } catch (err) { if (current === generation) options.onStatus(err.message, true); }
       }
-      if (e.data?.type === 'zoom:joined') { joined = true; options.onStatus('Đã kết nối Zoom. Dùng micro, camera, chia sẻ màn hình và chia nhóm trong khung Zoom.'); }
-      if (e.data?.type === 'zoom:waiting') options.onStatus('Đang chờ chủ trì Zoom cho vào phòng.');
+      if (e.data?.type === 'zoom:joined') { joined = true; if (options.onState) options.onState('joined'); options.onStatus('Đã kết nối Zoom. Dùng micro, camera, chia sẻ màn hình và chia nhóm trong khung Zoom.'); }
+      if (e.data?.type === 'zoom:waiting') { if (options.onState) options.onState('waiting'); options.onStatus('Đang chờ chủ trì Zoom cho vào phòng.'); }
+      if (e.data?.type === 'zoom:error' && options.onState) options.onState('error');
       if (e.data?.type === 'zoom:error') options.onStatus(e.data.message || 'Không kết nối được Zoom.', true);
-      if (e.data?.type === 'zoom:left') { joined = false; options.onStatus('Đã rời Zoom. Bạn vẫn có thể xem slide và chat. Bấm Kết nối Zoom để vào lại.'); }
+      if (e.data?.type === 'zoom:left') { joined = false; if (options.onState) options.onState('left'); options.onStatus('Đã rời Zoom. Bạn vẫn có thể xem slide và chat. Bấm Kết nối Zoom để vào lại.'); }
     };
     addEventListener('message', listener); frame.src = '/zoom-embed.html'; options.container.replaceChildren(frame);
   }

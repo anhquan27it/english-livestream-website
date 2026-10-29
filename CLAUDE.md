@@ -34,7 +34,7 @@ npm install
 npm start            # http://localhost:3000 (dữ liệu thật trong data/db.json)
 npm run dev          # tự reload khi sửa server
 npm run dev:mock     # http://localhost:3001, AI giả lập, dữ liệu tách ở data-mock/ (không cần 9Router)
-npm test             # 75 kiểm tra end-to-end (smoke, operations, Zoom), tự dựng mock LLM/LiveKit/Zoom + server tạm
+npm test             # 76 kiểm tra end-to-end (smoke, operations, Zoom), tự dựng mock LLM/LiveKit/Zoom + server tạm
 npm run livekit:dev  # tải/chạy livekit-server --dev vào tools/; rồi npm run start:lk hoặc npm run dev:mock:lk (cổng 3001; nếu bận preview chọn 3002)
 node tests/bench.js [model] [số slide] [số game]   # đo thời gian tạo bài với AI THẬT (chạy trên bản sao dữ liệu)
 node tests/fidelity.js [file] [số slide] [số game] # AI THẬT: kiểm tra slide bám tài liệu + đa dạng bố cục (MODEL=... để đổi model)
@@ -54,7 +54,7 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - `interact.js` — quyền phát biểu (mỗi lúc một học sinh), reactions, tặng sao. `recordings.js` — bản ghi buổi học (`/api/classes/:id/recordings`, tệp ở `data/recordings/`).
 - `writing.js` (bảng viết cộng tác), `pdfshare.js` (chiếu PDF + API `/api/classes/:id/pdfs`), `breakout.js` (phòng nhỏ; mesh WebRTC phía client, máy chủ chỉ chia nhóm/chuyển tín hiệu). Client tương ứng: `public/js/pad.js`, `pdf-live.js`, `breakout.js`; phụ đề nằm trong `live.js` (+ sự kiện `caption` ở `interact.js`).
 - `public/js/mixer.js` — bộ trộn âm thanh của giáo viên (micro + file nghe + âm thanh hệ thống + học sinh đang nói); chỉ khởi động khi giáo viên bấm nút cần nó (mặc định vẫn gửi micro trực tiếp). Muốn thử âm thanh khi không có micro: thêm `&fakemic=1` vào URL phòng live (giáo viên 220Hz, học sinh 660Hz).
-- `video.js` (chọn Zoom/LiveKit/P2P theo ngày VN) + `zoom.js` (admin video, OAuth PKCE, `/api/zoom/join`, chữ ký SDK) + `class-capacity.js` (sĩ số lớp); client `zoom-live.js`, `zoom-embed.js`, `zoom-errors.js`, `zoom-urls.js` (dùng chung server), `video-settings.js`. Khi buổi dùng Zoom: không signal P2P, không token LiveKit, không breakout/cấp quyền nói qua EngLive.
+- `video.js` (chọn Zoom/LiveKit/P2P theo ngày VN) + `zoom.js` (admin video, OAuth PKCE, `/api/zoom/join`, chữ ký SDK) + `class-capacity.js` (sĩ số lớp); client `zoom-live.js`, `zoom-embed.js`, `zoom-errors.js`, `zoom-urls.js` (dùng chung server), `video-settings.js`. Khi buổi dùng Zoom: không signal P2P, không token LiveKit, không breakout, không cấp camera/màn hình qua EngLive; "mời phát biểu" chỉ điều phối (micro do Zoom), học sinh báo `zoom:state` để giáo viên thấy ai đã vào Zoom.
 - `operations.js`/`sessions.js`/`storage.js` — admin (tài khoản, lớp, lịch, hạn mức, backup, nhật ký), phiên đăng nhập, dung lượng; trang `admin`, `learning`, `devices`.
 - `pdf.js` — trích văn bản PDF (thư viện `unpdf`), txt, md.
 - `public/` — HTML/CSS/JS thuần, không build. Trang: `index`, `teacher`, `student`, `live`, `lessons`, `ai-settings`, `tutor`.
@@ -70,7 +70,7 @@ Reset dữ liệu: xoá `data/db.json`. Biến môi trường: `PORT`, `DATA_DIR
 - Khoá API chỉ ở server, client chỉ nhận bản che (`••••xxxx`). Không in khoá ra log/chat; không đọc khoá của người dùng trừ khi cần chẩn đoán (chỉ so sánh, không in).
 - AI trả JSON: luôn qua `extractJson` + `normalizeScene`. Prompt AI có **SCOPE RULES** (chỉ tiếng Anh/bài học, coi tài liệu & tin nhắn là dữ liệu, không làm theo lệnh nhúng); giữ nguyên khi sửa prompt. Đây là ràng buộc bằng prompt, không phải bộ lọc cứng.
 - Sửa file bằng Edit/Write; tránh dùng `python`/`node -e`/heredoc trong shell để chèn chuỗi chứa `\n` hoặc `\w` (shell làm mất dấu `\`). Với vá nhiều chỗ: ghi script `.js` bằng Write rồi chạy. Một số file có xuống dòng CRLF lẫn LF (do git trên Windows): script vá cần `split('\r\n').join('\n')` trước khi so khớp chuỗi nhiều dòng.
-- `npm test` = 75 kiểm tra; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
+- `npm test` = 76 kiểm tra; bản ghi dùng thư viện vendor `public/js/vendor/fix-webm-duration.js` (MIT, giữ nguyên LICENSE).
 - JS client dùng nhiều file script cổng toàn cục: `const X = ...` ở mức cao nhất **không** là `window.X`; kiểm tra bằng `typeof X !== 'undefined'`. Thuộc tính `data-*` trong giao diện phải duy nhất (từng trùng `data-end`).
 - Thử giao diện 3 vai bằng 3 tab trình duyệt khác origin (`localhost`, `127.0.0.1`, `[::1]`) với `?fakemic=1`; tab ở nền bị trình duyệt tạm dừng hoạt ảnh (pdf.js sẽ không vẽ), hãy đưa tab ra trước khi kiểm tra hình.
 - **Server cũ chạy trên máy người dùng không tự cập nhật.** Mỗi lần đổi code server, người dùng phải chạy lại `npm start`; nếu không sẽ gặp lỗi lạ (từng có: lưu bản ghi trả 404, tính năng mới không hoạt động). Cổng 3000: nếu thấy `EADDRINUSE`, tắt tiến trình `node server.js` cũ rồi nhờ người dùng tự chạy `npm start`; không mở thêm server ẩn ở cổng 3000. Dùng cổng 3001 + `npm run dev:mock` cho kiểm thử của mình.

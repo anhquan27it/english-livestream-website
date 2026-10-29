@@ -565,6 +565,14 @@ io.on('connection', (socket) => {
     if (live.teacherSocket) io.to(live.teacherSocket).emit('hand', { socketId: socket.id, name: user.name, raised: !!raised });
   });
 
+  // Chế độ Zoom: học sinh báo đã vào/đang chờ/rời/lỗi Zoom (giống trạng thái hiện diện của LiveKit)
+  socket.on('zoom:state', ({ state } = {}) => {
+    const live = lives.get(socket.data.classId);
+    if (!live || live.video?.provider !== 'zoom' || !live.viewers.has(socket.id) || !['joined', 'waiting', 'left', 'error'].includes(state)) return;
+    live.viewers.get(socket.id).zoom = state;
+    if (live.teacherSocket) io.to(live.teacherSocket).emit('viewer:zoom', { socketId: socket.id, state });
+  });
+
   socket.on('hand:lower', ({ socketId }) => {
     const live = lives.get(socket.data.classId);
     if (!live || live.teacherSocket !== socket.id || !live.viewers.has(socketId)) return;

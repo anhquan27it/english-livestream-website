@@ -28,7 +28,7 @@ let screenStream = null;       // luồng chia sẻ màn hình (có thể kèm �
 const FAKE_MIC = new URLSearchParams(location.search).has('fakemic');
 let capRec = null, capOn = false, ccHidden = false, capClear = null; // phụ đề trực tiếp
 let LK = false;                // true khi máy chủ bật LiveKit: hình/tiếng đi qua LiveKit thay cho WebRTC P2P
-let ZOOM = false, selectedProvider = '';
+let ZOOM = false, selectedProvider = '', zoomState = ''; // zoomState: học sinh báo giáo viên đã vào Zoom hay chưa
 let soundVolume = (() => { try { const v = parseFloat(localStorage.getItem('englive_volume')); return v >= 0 && v <= 1 ? v : 1; } catch { return 1; } })();
 let soundMuted = false;        // học sinh tắt tiếng (với LiveKit, tiếng phát bằng các phần tử <audio> riêng)
 const lkPresent = new Set();   // userId đang có trong phòng LiveKit (giáo viên dùng để hiện trạng thái học sinh)
@@ -110,6 +110,7 @@ async function init() {
 
   if (isTeacher) {
     socket.on('viewer:joined', (v) => { viewers.set(v.socketId, v); if (LK) v.state = lkPresent.has(v.userId) ? 'connected' : 'connecting'; renderPeople(); if (!LK && !ZOOM) callViewer(v.socketId); });
+    socket.on('viewer:zoom', ({ socketId, state }) => { const v = viewers.get(socketId); if (v) { v.zoom = state; renderPeople(); } });
     socket.on('viewer:left', ({ socketId }) => { viewers.delete(socketId); closePeer(socketId); renderPeople(); });
     socket.on('hand', ({ socketId, name, raised }) => {
       const v = viewers.get(socketId);
@@ -127,7 +128,11 @@ async function init() {
     });
     socket.on('teacher:joined', () => { if (LK || ZOOM) return; showState(null, 'Giáo viên đã quay lại', 'Đang kết nối lại livestream...'); });
     socket.on('hand:lowered', () => { handRaised = false; renderControls(); toast('Giáo viên đã hạ tay của bạn'); });
-    socket.on('speak:granted', (d) => { spkPerms = (d && d.perms) || { camera: false, screen: false }; startMic(); });
+    socket.on('speak:granted', (d) => {
+      spkPerms = (d && d.perms) || { camera: false, screen: false };
+      if (ZOOM) { speaking = true; toast('🎤 Giáo viên mời bạn phát biểu — hãy bật micro trong khung Zoom rồi nói nhé!', 'success'); renderControls(); return; }
+      startMic();
+    });
     socket.on('speak:perms', ({ perms } = {}) => {
       const before = spkPerms;
       spkPerms = perms || { camera: false, screen: false };
@@ -159,7 +164,8 @@ function joinRoom() {
     if (!isTeacher && LK) connectLiveKitStudent();
     if (ZOOM) {
       hideState();
-      ZoomLive.connect({ classId, container: $('zoomHost'), onStatus: (message, error = false) => { $('zoomNotice').hidden = false; $('zoomNotice').textContent = message; $('zoomNotice').classList.toggle('error', error); } });
+      if (!isTeacher && zoomState) socket.emit('zoom:state', { state: zoomState }); // nối lại socket: báo lại trạng thái
+      ZoomLive.connect({ classId, container: $('zoomHost'), onState: (s) => { zoomState = s; if (!isTeacher) socket.emit('zoom:state', { state: s }); }, onStatus: (message, error = false) => { $('zoomNotice').hidden = false; $('zoomNotice').textContent = message; $('zoomNotice').classList.toggle('error', error); } });
     }
     if (isTeacher && res.breakout) BreakoutLive.setState(res.breakout);
     if (!isTeacher && res.breakout) BreakoutLive.rejoin(res.breakout);
@@ -521,16 +527,18 @@ function ctrl(id, icon, label, cls = '') {
 }
 const SEP = '<span class="ctrl-sep" aria-hidden="true"></span>';
 
+const zoomPresence = (v) => ({ joined: '● Đang trong Zoom', waiting: '⏳ Đang chờ chủ trì cho vào Zoom', error: '⚠ Zoom lỗi — nhờ học sinh bấm Kết nối Zoom', left: 'Đã rời Zoom' }[v.zoom] || 'Đã vào EngLive · chưa vào Zoom');
+
 function renderZoomControls() {
   const box = $('controls');
   box.innerHTML = ctrl('zReconnect', 'video', 'Kết nối Zoom') + SEP +
-    (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + ctrl('zReact', 'smile', 'Cảm xúc')) + SEP +
+    (isTeacher ? ctrl('zLesson', 'presentation', 'Thêm / đổi bài giảng') + ctrl('zWord', 'book-open-text', 'Thẻ từ vựng') + ctrl('zCap', 'captions', capOn ? 'Tắt phụ đề' : 'Phụ đề', capOn ? 'on' : '') + ctrl('zRecord', rec ? 'circle-stop' : 'circle-dot', rec ? 'Dừng ghi ' + fmtDuration(Date.now() - rec.startedAt) : 'Ghi tab kèm Zoom', rec ? 'danger rec' : '') : ctrl('zHand', 'hand', handRaised ? 'Hạ tay' : 'Giơ tay trong EngLive', handRaised ? 'on' : '') + (speaking ? ctrl('zSpeak', 'mic', 'Bạn được mời phát biểu — bật micro trong Zoom', 'on') : '') + ctrl('zReact', 'smile', 'Cảm xúc') + ctrl('zCC', 'captions', ccHidden ? 'Hiện phụ đề' : 'Phụ đề', ccHidden ? 'off' : '')) + SEP +
     ctrl('zFull', 'maximize', 'Toàn màn hình') + ctrl('zLeave', isTeacher ? 'square' : 'log-out', isTeacher ? 'Kết thúc buổi học' : 'Rời lớp', 'danger');
   $('zReconnect').onclick = ZoomLive.retry;
   $('zFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen().catch(() => {});
   $('zLeave').onclick = isTeacher ? endLive : leave;
-  if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zRecord').onclick = toggleZoomRecord; }
-  else { $('zHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); }; $('zReact').onclick = reactPicker; }
+  if (isTeacher) { $('zLesson').onclick = () => LessonLive.openPicker(); $('zWord').onclick = wordModal; $('zCap').onclick = toggleCaptions; $('zRecord').onclick = toggleZoomRecord; }
+  else { $('zHand').onclick = () => { handRaised = !handRaised; socket.emit('hand', { raised: handRaised }); renderControls(); }; $('zReact').onclick = reactPicker; $('zCC').onclick = () => { ccHidden = !ccHidden; if (ccHidden) $('captions').hidden = true; renderControls(); }; }
   icons();
 }
 
@@ -607,10 +615,10 @@ function renderPeople() {
   $('peopleCount').textContent = list.length;
   panel.innerHTML = list.length ? `<div class="panel-heading">Đang xem · ${list.length}</div>` + list.map(([id, v]) => `
     <div class="viewer">${avatar(v.name, 'sm round')}
-      <div class="info">${esc(v.name)}<small>${ZOOM ? 'Đã vào EngLive · video xem trong Zoom' : v.state === 'connected' ? '● Đang xem' : v.state === 'failed' ? 'Kết nối lỗi' : 'Đang kết nối...'}</small></div>
+      <div class="info">${esc(v.name)}<small>${ZOOM ? zoomPresence(v) : v.state === 'connected' ? '● Đang xem' : v.state === 'failed' ? 'Kết nối lỗi' : 'Đang kết nối...'}</small></div>
       ${v.hand ? `<span class="hand">✋</span><button class="icon-btn" data-lower="${id}" title="Hạ tay"><i data-lucide="hand"></i></button>` : ''}
       <button class="icon-btn" data-star="${id}" title="Tặng sao (+10 điểm)"><i data-lucide="star"></i></button>
-      ${ZOOM ? '' : `<button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? 'Thu lại mic' : 'Cho phép phát biểu'}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>`}
+      ${`<button class="icon-btn ${speakerSocket === id ? 'speaking' : ''}" data-speak="${id}" title="${speakerSocket === id ? (ZOOM ? 'Thu lại lượt phát biểu' : 'Thu lại mic') : (ZOOM ? 'Mời phát biểu (học sinh tự bật mic trong Zoom)' : 'Cho phép phát biểu')}"><i data-lucide="${speakerSocket === id ? 'mic-off' : 'mic'}"></i></button>`}
       ${LK && speakerSocket === id ? `<button class="icon-btn ${speaker && speaker.perms && speaker.perms.camera ? 'speaking' : ''}" data-perm="camera" title="${speaker && speaker.perms && speaker.perms.camera ? 'Thu quyền camera' : 'Cho phép bật camera'}"><i data-lucide="video"></i></button><button class="icon-btn ${speaker && speaker.perms && speaker.perms.screen ? 'speaking' : ''}" data-perm="screen" title="${speaker && speaker.perms && speaker.perms.screen ? 'Thu quyền chia sẻ màn hình' : 'Cho phép chia sẻ màn hình'}"><i data-lucide="monitor-up"></i></button>` : ''}
       <button class="icon-btn" data-kick="${id}" title="Mời rời buổi học"><i data-lucide="user-x"></i></button>
     </div>`).join('')
@@ -619,7 +627,7 @@ function renderPeople() {
   panel.querySelectorAll('[data-speak]').forEach((b) => (b.onclick = () => {
     const id = b.dataset.speak;
     if (speakerSocket === id) return socket.emit('speak:revoke');
-    ensureMixer(); // cần thao tác người dùng để bật bộ trộn âm thanh
+    if (!ZOOM) ensureMixer(); // cần thao tác người dùng để bật bộ trộn âm thanh
     socket.emit('speak:grant', { socketId: id }, (r) => r && r.error && toast(r.error, 'error'));
   }));
   panel.querySelectorAll('[data-perm]').forEach((b) => (b.onclick = () => {
