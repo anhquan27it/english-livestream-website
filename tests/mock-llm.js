@@ -44,7 +44,8 @@ function reply(messages) {
   }
   // chat: phản hồi cho biết ngữ cảnh có đáp án hay không để test không lộ đáp án
   const correct = (system.match(/^Correct: /gm) || []).length;
-  return `Mock tutor: ${last.slice(0, 60)} [ctx:correct=${correct}] [slide:${/CURRENT SLIDE/.test(system)}] [scope:${/SCOPE RULES/.test(system)}]`;
+  const bold = /bold/i.test(last) ? ' Try: **luggage** - hành lý. Please say: I lost my luggage.' : '';
+  return `Mock tutor: ${last.slice(0, 60)} [ctx:correct=${correct}] [slide:${/CURRENT SLIDE/.test(system)}] [scope:${/SCOPE RULES/.test(system)}] [kind:${(system.match(/PRACTICE MODE.*?(ROLE-PLAY|CORRECTION|QUIZ) MODE/) || [])[1] || 'none'}]${bold}`;
 }
 
 function createServer() {

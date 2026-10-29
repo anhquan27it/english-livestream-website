@@ -39,12 +39,27 @@ async function loadLessons(preferred) {
   paint();
 }
 
-function paint() {
+let pinned = [];
+async function loadPinned() {
+  try { pinned = (await api('/api/ai/chats?classId=' + encodeURIComponent(classId))).chats.filter((c) => c.pinned); } catch { pinned = []; }
+  paintSide();
+}
+
+function paintSide() {
   $('side').innerHTML = `
+    ${pinned.length ? `<div class="panel-heading" style="color:var(--muted);margin:0">📌 Hội thoại đã ghim</div><div class="t-pinned">${pinned.map((c) => `<button class="t-lesson" data-chat="${c.id}" data-lesson="${c.lessonId || ''}"><span class="ic tone-orange">📌</span><span><b>${esc(c.title)}</b><small>${esc(c.lessonTitle || 'Hỏi đáp chung')}</small></span></button>`).join('')}</div>` : ''}
     <div class="panel-heading" style="color:var(--muted);margin:0">Chọn chủ đề</div>
     ${lessons.map((l) => `<button class="t-lesson ${l.id === lessonId ? 'active' : ''}" data-id="${l.id}"><span class="ic tone-violet">📘</span><span><b>${esc(l.title)}</b><small>${l.taught ? 'Đã học ' + fmtDate(l.taught) : 'Chưa dạy'} · ${l.sceneCount} slide</small></span></button>`).join('')}
     <button class="t-lesson ${lessonId ? '' : 'active'}" data-id=""><span class="ic tone-orange">💬</span><span><b>Hỏi đáp chung</b><small>Luyện tiếng Anh, ngữ pháp, từ vựng</small></span></button>`;
-  $('side').querySelectorAll('.t-lesson').forEach((b) => (b.onclick = () => { lessonId = b.dataset.id || null; paint(); }));
-  AiChat.mount($('chat'), { classId, lessonId });
+  $('side').querySelectorAll('.t-lesson[data-id]').forEach((b) => (b.onclick = () => { lessonId = b.dataset.id || null; openChatId = null; mountChat(); paintSide(); }));
+  $('side').querySelectorAll('.t-lesson[data-chat]').forEach((b) => (b.onclick = () => { lessonId = b.dataset.lesson || null; openChatId = b.dataset.chat; mountChat(); paintSide(); }));
   icons();
 }
+
+let openChatId = null;
+function mountChat() {
+  AiChat.mount($('chat'), { classId, lessonId, initialChatId: openChatId, onChatsChanged: loadPinned });
+  openChatId = null;
+}
+
+function paint() { paintSide(); mountChat(); loadPinned(); }

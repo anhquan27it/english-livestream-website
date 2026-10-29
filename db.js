@@ -91,6 +91,13 @@ function load() {
   db.settings = db.settings || {};
   db.lessons = db.lessons || [];
   db.chats = db.chats || [];
+  for (const ch of db.chats) { // hội thoại cũ chưa có tiêu đề/ghim/loại
+    const first = (ch.messages || []).find((m) => m.role === 'user');
+    ch.title = ch.title || (first ? String(first.content).replace(/\s+/g, ' ').slice(0, 40) : 'Hội thoại');
+    ch.kind = ch.kind || 'chat'; ch.pinned = !!ch.pinned;
+    const last = (ch.messages || [])[(ch.messages || []).length - 1];
+    ch.updatedAt = ch.updatedAt || (last && last.at) || Date.now(); ch.createdAt = ch.createdAt || ch.updatedAt;
+  }
   db.recordings = db.recordings || [];
   db.pdfs = db.pdfs || [];
   for (const k of ['audit', 'schedules', 'assignments', 'submissions', 'vocabulary', 'activityResults']) db[k] = db[k] || [];

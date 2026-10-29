@@ -490,3 +490,38 @@
   .icon-btn.mobile-only { min-width: 40px; min-height: 40px; }
   .panel-tabs button { height: 42px; }
 }
+
+/* ---------- Chat AI: nhiều hội thoại, ghim, kiểu luyện ---------- */
+.aic-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px 0; }
+.aic-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 1px solid var(--aic-line); background: var(--aic-card); color: var(--aic-text); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; text-align: left; }
+.aic-title span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aic-title svg { width: 15px; height: 15px; flex: none; color: var(--aic-muted); }
+.aic-ibtn { flex: none; width: 34px; height: 34px; border: 1px solid var(--aic-line); background: var(--aic-card); color: var(--aic-muted); border-radius: 10px; display: grid; place-items: center; cursor: pointer; }
+.aic-ibtn svg { width: 16px; height: 16px; }
+.aic-ibtn:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); }
+.aic-ibtn.danger:hover { color: var(--pink); border-color: var(--pink); }
+.aic-ibtn.on { color: #f5a524; border-color: #f5a524; background: rgba(245, 165, 36, .14); }
+.aic-ibtn:disabled { opacity: .4; cursor: default; }
+.aic-ctx { padding: 6px 14px 0; font-size: 12px; font-weight: 700; color: var(--aic-muted); }
+.aic-panel { margin: 8px 10px 0; border: 1px solid var(--aic-line); background: var(--aic-card); border-radius: 12px; padding: 6px; max-height: 46%; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.aic-panel[hidden] { display: none; }
+.aic-ph { padding: 8px 10px; font-size: 12.5px; font-weight: 700; color: var(--aic-muted); }
+.aic-row { display: flex; gap: 4px; align-items: center; border-radius: 10px; padding: 2px; }
+.aic-row.active { background: rgba(124, 108, 255, .16); }
+.aic-open, .aic-kind { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; border: 0; background: none; color: var(--aic-text); font: inherit; text-align: left; cursor: pointer; padding: 6px 8px; border-radius: 10px; }
+.aic-kind:hover, .aic-open:hover { background: rgba(124, 108, 255, .12); }
+.aic-open b, .aic-kind b { display: block; font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aic-open small, .aic-kind small { display: block; color: var(--aic-muted); font-weight: 600; font-size: 11.5px; line-height: 1.35; }
+.aic-open > span:first-child, .aic-kind > span:first-child { font-size: 20px; flex: none; }
+.aic-open > span:last-child, .aic-kind > span:last-child { min-width: 0; }
+.aic-row .aic-ibtn { width: 30px; height: 30px; border-color: transparent; background: none; }
+.aic-msg.bot { position: relative; }
+.aic-spk { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 26px; border: 0; border-radius: 8px; background: rgba(127, 127, 160, .14); color: var(--aic-muted); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.aic-spk svg { width: 14px; height: 14px; }
+.aic-msg.bot:hover .aic-spk, .aic-spk:focus-visible { opacity: 1; }
+@media (hover: none) { .aic-spk { opacity: .8; } }
+.aic-msg.bot { padding-right: 38px; }
+.aic-w { cursor: pointer; border-bottom: 1.5px dotted var(--primary); }
+.aic-w:hover { background: rgba(124, 108, 255, .16); border-radius: 4px; }
+.t-pinned { display: flex; flex-direction: column; gap: 8px; }
+.t-pinned .t-lesson { padding: 9px 12px; }

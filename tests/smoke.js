@@ -654,6 +654,31 @@ async function main() {
     assert.equal((await api(S1, 'GET', `/api/ai/chat?classId=${ielts.id}&lessonId=${lessonId}`)).body.messages.length, 0);
     assert.equal((await api(S3, 'GET', `/api/classes/${ielts.id}/lessons`)).status, 403);
   });
+  await test('nhiều hội thoại AI: tạo mới theo kiểu luyện, đổi tên, ghim, xóa và chỉ chủ sở hữu được sửa', async () => {
+    const ctx = { classId: ielts.id };
+    const a = await api(S1, 'POST', '/api/ai/chat', { ...ctx, newChat: true, kind: 'roleplay', message: "Let's role-play at a restaurant" });
+    assert.equal(a.status, 200); assert.ok(a.body.chatId); assert.match(a.body.reply, /[kind:ROLE-PLAY]/); assert.match(a.body.reply, /[scope:true]/);
+    const b = await api(S1, 'POST', '/api/ai/chat', { ...ctx, newChat: true, kind: 'bogus', message: 'Second chat about grammar' });
+    assert.equal(b.status, 200); assert.notEqual(b.body.chatId, a.body.chatId); assert.match(b.body.reply, /[kind:none]/);
+    const cont = await api(S1, 'POST', '/api/ai/chat', { ...ctx, chatId: a.body.chatId, message: 'Next turn' });
+    assert.equal(cont.body.chatId, a.body.chatId);
+    assert.equal((await api(S1, 'GET', '/api/ai/chat?classId=' + ielts.id + '&chatId=' + a.body.chatId)).body.messages.length, 4);
+    assert.equal((await api(S1, 'GET', '/api/ai/chat?classId=' + ielts.id + '&chatId=ch_missing')).status, 404);
+    assert.equal((await api(S1, 'POST', '/api/ai/chat', { ...ctx, chatId: 'ch_missing', message: 'x' })).status, 404);
+    let list = (await api(S1, 'GET', '/api/ai/chats?classId=' + ielts.id + '&lessonId=')).body.chats;
+    assert.ok(list.length >= 2); assert.match(list.find((c) => c.id === a.body.chatId).title, /role-play/i);
+    assert.equal(list.find((c) => c.id === a.body.chatId).kind, 'roleplay');
+    assert.equal((await api(S2, 'PATCH', '/api/ai/chats/' + a.body.chatId, { pinned: true })).status, 404);
+    assert.equal((await api(S2, 'DELETE', '/api/ai/chats/' + a.body.chatId)).status, 404);
+    assert.equal((await api(S1, 'PATCH', '/api/ai/chats/' + b.body.chatId, { title: '   ' })).status, 400);
+    assert.equal((await api(S1, 'PATCH', '/api/ai/chats/' + b.body.chatId, { title: 'Ngữ pháp quan trọng', pinned: true })).status, 200);
+    list = (await api(S1, 'GET', '/api/ai/chats?classId=' + ielts.id)).body.chats;
+    assert.equal(list[0].id, b.body.chatId); assert.equal(list[0].pinned, true); assert.equal(list[0].title, 'Ngữ pháp quan trọng');
+    assert.equal((await api(S2, 'GET', '/api/ai/chats?classId=' + ielts.id)).body.chats.length, 0);
+    assert.equal((await api(S3, 'GET', '/api/ai/chats?classId=' + ielts.id)).status, 403);
+    assert.equal((await api(S1, 'DELETE', '/api/ai/chats/' + a.body.chatId)).status, 200);
+    assert.equal((await api(S1, 'GET', '/api/ai/chats?classId=' + ielts.id)).body.chats.some((c) => c.id === a.body.chatId), false);
+  });
   await test('hỏi đáp chung (không có bài) và lỗi AI không lộ chi tiết cho học sinh', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is present perfect?' });
     assert.equal(r.status, 200);

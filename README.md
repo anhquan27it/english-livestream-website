@@ -27,7 +27,7 @@ Các thành phần tùy chọn (không bắt buộc để chạy):
 | **Zoom Meeting SDK** | Tùy chọn, cần tài khoản/app Zoom riêng: xem mục *Zoom Meeting SDK + LiveKit* bên dưới. Admin chọn dịch vụ mỗi ngày ở `/video-settings.html`. |
 | **Cho bạn bè ở máy khác vào thử** | `cloudflared tunnel --url http://localhost:3000` (xem mục *Cho bạn bè test qua link tạm*). Camera/micro cần **HTTPS hoặc localhost** — mở bằng `http://IP-LAN` trình duyệt sẽ chặn. |
 
-Lệnh thường dùng: `npm test` (75 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
+Lệnh thường dùng: `npm test` (77 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
 
 **Lưu ý bảo mật:** `data/` (chứa API key AI, token Zoom, mật khẩu băm, bản ghi) và `data-mock/` **không** được commit — giữ nguyên như vậy. Không dán khóa LiveKit/Zoom/AI vào chat hoặc commit. Trước khi mở cho người lạ: đổi/xóa tài khoản mẫu `123456`, đổi mật khẩu admin, tạo lại mọi khóa từng bị lộ. Biến môi trường khác: `PORT`, `DATA_DIR`, `AI_CONCURRENCY`, `LIVEKIT_PUBLIC_URL`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_PUBLIC_CLIENT_ID`, `ZOOM_REDIRECT_URI`.
 
@@ -152,6 +152,29 @@ Thử giao diện không cần 9Router: `npm run dev:mock` (http://localhost:300
 Kế hoạch và tiến độ chi tiết: [PROJECT.md](PROJECT.md).
 
 ## Cho bạn bè test qua link tạm
+
+### Tự chạy khi đăng nhập Windows
+
+Chạy PowerShell trong thư mục dự án (cần Node.js và `cloudflared` trong PATH):
+
+```powershell
+# Cài tự chạy sau khi đăng nhập Windows
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Install
+# Bật ngay ở nền
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Start -Background
+# Xem link HTTPS hiện tại
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Status
+# Dừng tunnel và server do launcher tự mở; giữ server có sẵn
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Stop
+# Gỡ tự khởi động; không dừng phiên đang chạy
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tunnel.ps1 -Action Uninstall
+```
+
+Launcher dùng lại server khỏe ở cổng 3000, chỉ mở `node server.js` nếu cổng trống; không đụng server có sẵn. Mutex tránh chạy trùng; tunnel tự thử lại khi tiến trình thoát. Link/log ở `data/tunnel/` (ngoài Git): `link.txt`, `Open EngLive.url`, `launcher.log`, `web-error.log`, `cloudflared-error.log`. Đợi khoảng 15–60 giây sau sign-in rồi xem link. Di chuyển thư mục dự án phải cài lại shortcut Startup.
+
+Link miễn phí là hostname ngẫu nhiên, đổi khi tạo tunnel mới. Máy phải bật, không sleep và có mạng. Không tự chạy 9Router hoặc LiveKit self-host, không lưu khóa trong terminal cũ. Quick Tunnel không hỗ trợ SSE; AI streaming dùng SSE cần kiểm tra riêng. Không tự đổi OAuth callback Zoom: liên kết từ máy khác cần callback công khai trùng trong Zoom/EngLive, và cập nhật lại khi hostname đổi. Chỉ chia sẻ cho nhóm thử tin cậy nếu còn demo/admin 123456. Xem [giới hạn Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+### Bật thủ công
 
 GitHub chỉ lưu mã nguồn (GitHub Pages không chạy được máy chủ Node.js và Socket.IO). Để bạn bè ở máy khác vào thử, chạy server trên máy bạn rồi mở tunnel Cloudflare:
 
