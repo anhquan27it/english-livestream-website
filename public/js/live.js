@@ -59,6 +59,7 @@ async function init() {
   if (!classId) return showState('🤔', 'Không tìm thấy lớp học', 'Đường dẫn không hợp lệ.', true);
   try {
     const { class: c } = await api('/api/classes/' + classId);
+    if (typeof WordPop !== 'undefined') WordPop.setClass(classId);
     selectedProvider = c.live?.provider || '';
     ZOOM = selectedProvider === 'zoom';
     $('liveTitle').textContent = c.live ? c.live.title : c.name;

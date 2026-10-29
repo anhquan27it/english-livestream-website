@@ -702,6 +702,19 @@ async function main() {
     assert.equal((await post('c.docx', Buffer.from('PK'))).status, 400);
     assert.equal((await fetch(BASE + '/api/ai/extract', { method: 'POST', body: 'x' })).status, 401);
   });
+  await test('tra từ nhanh trên slide: chỉ từ tiếng Anh, thành viên lớp, có bộ nhớ đệm', async () => {
+    const look = (token, body) => api(token, 'POST', '/api/ai/lookup', body);
+    const a = await look(S2, { classId: ielts.id, word: 'Luggage', context: 'Pack your luggage.' });
+    assert.equal(a.status, 200, JSON.stringify(a.body)); assert.equal(a.body.word, 'luggage'); assert.equal(a.body.ipa, '/mock/'); assert.match(a.body.meaning, /luggage/i); assert.ok(a.body.example);
+    const b = await look(S1, { classId: ielts.id, word: 'luggage' });
+    assert.equal(b.status, 200); assert.equal(b.body.cached, true);
+    for (const bad of ['', 'hello123', 'a b c d e f', '<script>', 'xin chào']) assert.equal((await look(S2, { classId: ielts.id, word: bad })).status, 400, bad);
+    assert.equal((await look(S2, { classId: ielts.id, word: 'zzz' })).status, 422);
+    assert.equal((await look(S3, { classId: ielts.id, word: 'ticket' })).status, 403);
+    assert.equal((await look(S2, { word: 'ticket' })).status, 403);
+    assert.equal((await look(T, { word: 'ticket' })).status, 200);
+    assert.equal((await api(null, 'POST', '/api/ai/lookup', { word: 'ticket' })).status, 401);
+  });
   await test('hỏi đáp chung (không có bài) và lỗi AI không lộ chi tiết cho học sinh', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is present perfect?' });
     assert.equal(r.status, 200);

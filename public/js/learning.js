@@ -24,6 +24,7 @@ function render(){
 }
 async function review(classId, sessionId) {
  try {
+  if (typeof WordPop !== 'undefined') WordPop.setClass(classId);
   const { session } = await api('/api/classes/'+encodeURIComponent(classId)+'/sessions/'+encodeURIComponent(sessionId)+'/review');
   const slides = session.lessons.flatMap(lesson => lesson.slides.map(slide => ({ ...slide, lessonTitle: lesson.title })));
   if (!slides.length) return toast('Buổi học không có slide để xem lại.');

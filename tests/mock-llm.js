@@ -44,6 +44,11 @@ function reply(messages) {
     const layout = (/layout: "(\w+)"/.exec(last) || [])[1];
     return JSON.stringify(sceneJson(type, title, layout, /Source excerpt for this scene/.test(last)));
   }
+  if (/LEARNER DICTIONARY/.test(system)) { // tra từ nhanh
+    const w = (/Word or phrase: (.+)/.exec(last) || [])[1] || 'word';
+    if (/zzz/i.test(w)) return JSON.stringify({ error: 'not english' });
+    return JSON.stringify({ word: w.toLowerCase(), ipa: '/mock/', pos: 'noun', meaning: 'nghĩa của ' + w, example: 'I like ' + w + '.' });
+  }
   if (/EXERCISE GENERATOR/.test(system)) { // soạn bài tập bằng AI: mỗi dạng một câu mẫu (câu thứ 3 cố ý hỏng để thử bộ lọc)
     const types = ((/Allowed types: ([\w, ]+)/.exec(last) || [])[1] || 'mcq').split(/,\s*/);
     const count = +(/Number of items: (\d+)/.exec(last) || [])[1] || 3;

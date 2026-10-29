@@ -206,6 +206,7 @@ const Slides = (() => {
     root.innerHTML = `<div class="sl sl-${sc.type}"><div class="sl-in">${timer}${body}</div></div>`;
     bind(root, ctx);
     icons();
+    if (typeof WordPop !== 'undefined') WordPop.decorate(root, sc); // bấm từ vựng / bôi đen từ để tra nhanh
   }
 
   function bind(root, ctx) {

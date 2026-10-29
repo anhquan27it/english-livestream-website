@@ -544,3 +544,22 @@
 .aic-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .aic-thumbs img { max-width: 180px; max-height: 140px; border-radius: 10px; display: block; }
 .aic-file { background: rgba(255, 255, 255, .2); border-radius: 8px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+
+/* Tra từ nhanh trên slide */
+.wp-w { border-bottom: 2px dotted var(--primary); cursor: pointer; border-radius: 3px; }
+.wp-w:hover, .wp-w:focus-visible { background: rgba(124, 108, 255, .16); outline: none; }
+#wordPop { position: fixed; z-index: 100000; background: #fff; color: #1c1b33; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 40px rgba(20, 16, 60, .28); padding: 12px 14px; font-size: 15px; line-height: 1.5; }
+#wordPop .wp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#wordPop .wp-head b { font-size: 17px; }
+#wordPop .wp-ipa { color: var(--primary); font-weight: 700; font-size: 14px; }
+#wordPop .wp-head em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 700; background: var(--bg); border-radius: 6px; padding: 1px 6px; }
+#wordPop .wp-say { width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--primary-50); color: var(--primary-600); display: grid; place-items: center; cursor: pointer; flex: none; }
+#wordPop .wp-say svg { width: 16px; height: 16px; }
+#wordPop .wp-x { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+#wordPop .wp-mean { margin-top: 6px; font-size: 16px; font-weight: 600; color: #168b5b; }
+#wordPop .wp-ex { margin-top: 4px; color: var(--ink-2); font-style: italic; }
+#wordPop .wp-err { margin-top: 6px; color: var(--pink); font-weight: 600; font-size: 14px; }
+#wordPop .wp-load { margin-top: 6px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+#wordPop .wp-load i { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--primary); border-radius: 50%; animation: aicspin .7s linear infinite; }
+#wordPop .wp-save { margin-top: 10px; width: 100%; border: 1.5px solid var(--primary); background: var(--primary-50); color: var(--primary-600); border-radius: 10px; padding: 7px 10px; font: inherit; font-weight: 800; cursor: pointer; }
+#wordPop .wp-save:disabled { opacity: .7; cursor: default; }
