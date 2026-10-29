@@ -570,3 +570,18 @@
 #wordPop .wp-load i { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--primary); border-radius: 50%; animation: aicspin .7s linear infinite; }
 #wordPop .wp-save { margin-top: 10px; width: 100%; border: 1.5px solid var(--primary); background: var(--primary-50); color: var(--primary-600); border-radius: 10px; padding: 7px 10px; font: inherit; font-weight: 800; cursor: pointer; }
 #wordPop .wp-save:disabled { opacity: .7; cursor: default; }
+
+/* Con trỏ giáo viên trên slide (pointer.js): nút bật/tắt của giáo viên + chấm sáng phía học sinh */
+.ptr-btn { position: absolute; top: 56px; right: 14px; z-index: 7; display: none; gap: 6px; }
+.stage.with-slide .ptr-btn:not([hidden]) { display: inline-flex; }
+.stage.zoom-mode .ptr-btn { top: 14px; }
+.ptr-btn.on { border-color: var(--primary); color: var(--primary); }
+.ptr-btn svg { width: 16px; height: 16px; }
+.tp-dot { position: fixed; left: 0; top: 0; z-index: 60; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, #fff 0 18%, #ff5a1f 30%, rgba(255, 90, 31, .55) 55%, rgba(255, 90, 31, 0) 72%);
+  box-shadow: 0 0 18px 6px rgba(255, 90, 31, .45); transition: transform .09s linear, opacity .25s; }
+.tp-dot.show { opacity: 1; }
+.tp-ripple { position: fixed; z-index: 60; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 3px solid #ff5a1f; pointer-events: none; animation: tp-ripple .65s ease-out forwards; }
+@keyframes tp-ripple { from { transform: scale(.6); opacity: 1; } to { transform: scale(3.4); opacity: 0; } }
+@media (max-width: 600px) { .ptr-btn span { display: none; } }
+@media (prefers-reduced-motion: reduce) { .tp-dot { transition: opacity .25s; } }

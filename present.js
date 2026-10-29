@@ -146,6 +146,21 @@ function init({ io, lives }) {
       broadcast(live);
     });
 
+    // Con trỏ của giáo viên trên slide/PDF: chỉ chuyển tiếp cho cả lớp, không lưu. Vị trí gắn theo phần tử
+    // (đường dẫn chỉ số trong khung slide + tỉ lệ trong phần tử) vì slide tự co giãn khác nhau trên từng máy.
+    socket.on('pointer:move', (p) => {
+      const live = teacherCtx();
+      if (!live || !p || typeof p !== 'object') return;
+      if (p.hide) return socket.to('live:' + socket.data.classId).volatile.emit('pointer', { hide: true });
+      const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null);
+      const x = num(p.x), y = num(p.y), fx = num(p.fx), fy = num(p.fy);
+      if (x === null || y === null) return;
+      const path = Array.isArray(p.path) && p.path.length <= 24 && p.path.every((i) => Number.isInteger(i) && i >= 0 && i < 1000) ? p.path : null;
+      const out = { x, y, click: p.click === true };
+      if (path && fx !== null && fy !== null) Object.assign(out, { path, fx, fy, tag: String(p.tag || '').slice(0, 12) });
+      socket.to('live:' + socket.data.classId).volatile.emit('pointer', out);
+    });
+
     socket.on('activity:start', ({ seconds } = {}) => {
       const live = teacherCtx();
       if (!live || !live.lesson) return;

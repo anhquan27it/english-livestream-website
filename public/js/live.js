@@ -90,6 +90,7 @@ async function init() {
   socket = connectSocket();
   LessonLive.init({ socket });
   PdfLive.init({ isTeacher, socket, classId, stage: $('stage'), layer: $('slideLayer'), panel: $('lessonPanel') });
+  TeacherPointer.init({ isTeacher, socket, stage: $('stage'), layer: $('slideLayer'), btn: $('ptrBtn') });
   PadLive.init({ isTeacher, socket, stage: $('stage'), panel: $('padPanel') });
   BreakoutLive.init({ lk: LK, isTeacher, socket, stage: $('stage'), panel: $('boPanel'), getMedia: getBreakoutMedia, muteMain: setMainMuted, muteTeacherMain, teacherTracks: () => (camStream ? camStream.getTracks() : []) });
   socket.on('connect', joinRoom);

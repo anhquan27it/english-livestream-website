@@ -248,6 +248,25 @@ async function main() {
     ts.emit('slide:goto', { index: 0 });
     await back;
   });
+  await test('con trỏ giáo viên chuyển tới học sinh (đã kẹp giá trị); học sinh không gửi được con trỏ', async () => {
+    const got = nextEvent(ss, 'pointer', (p) => p && !p.hide);
+    ts.emit('pointer:move', { x: 0.4, y: 1.7, path: [0, 2, 1], fx: 0.5, fy: -3, tag: 'LI', click: true, extra: 'x' });
+    const p = await got;
+    assert.deepEqual(p, { x: 0.4, y: 1, click: true, path: [0, 2, 1], fx: 0.5, fy: 0, tag: 'LI' });
+    const bad = nextEvent(ss, 'pointer', (q) => q && !q.hide);
+    ts.emit('pointer:move', { x: 0.1, y: 0.2, path: ['<b>'], fx: 0.5, fy: 0.5 });
+    assert.deepEqual(await bad, { x: 0.1, y: 0.2, click: false }, 'đường dẫn sai thì chỉ gửi tỉ lệ khung');
+    let leaked = false;
+    const spy = () => { leaked = true; };
+    ts.on('pointer', spy);
+    ss.emit('pointer:move', { x: 0.5, y: 0.5 });
+    await sleep(150);
+    ts.off('pointer', spy);
+    assert.equal(leaked, false, 'học sinh không điều khiển được con trỏ');
+    const hid = nextEvent(ss, 'pointer', (q) => q && q.hide);
+    ts.emit('pointer:move', { hide: true });
+    assert.deepEqual(await hid, { hide: true });
+  });
   await test('chat AI trong buổi live biết slide hiện tại và KHÔNG lộ đáp án quiz chưa chốt', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is luggage?' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
