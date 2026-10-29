@@ -20,7 +20,9 @@ function sceneJson(type, title, layout, excerpt) {
 }
 
 function reply(messages) {
-  const last = messages[messages.length - 1].content;
+  let last = messages[messages.length - 1].content;
+  let images = 0;
+  if (Array.isArray(last)) { images = last.filter((p) => p.type === 'image_url').length; last = last.filter((p) => p.type === 'text').map((p) => p.text).join('\n'); }
   const system = (messages[0] && messages[0].role === 'system' && messages[0].content) || '';
   if (/Reply with exactly: OK/.test(last)) return 'OK';
   if (/Design the outline/.test(last)) {
@@ -61,7 +63,7 @@ function reply(messages) {
   // chat: phản hồi cho biết ngữ cảnh có đáp án hay không để test không lộ đáp án
   const correct = (system.match(/^Correct: /gm) || []).length;
   const bold = /bold/i.test(last) ? ' Try: **luggage** - hành lý. Please say: I lost my luggage.' : '';
-  return `Mock tutor: ${last.slice(0, 60)} [ctx:correct=${correct}] [slide:${/CURRENT SLIDE/.test(system)}] [scope:${/SCOPE RULES/.test(system)}] [kind:${(system.match(/PRACTICE MODE.*?(ROLE-PLAY|CORRECTION|QUIZ) MODE/) || [])[1] || 'none'}]${bold}`;
+  return `Mock tutor: ${last.slice(0, 60)} [ctx:correct=${correct}] [slide:${/CURRENT SLIDE/.test(system)}] [scope:${/SCOPE RULES/.test(system)}] [kind:${(system.match(/PRACTICE MODE.*?(ROLE-PLAY|CORRECTION|QUIZ) MODE/) || [])[1] || 'none'}] [images:${images}] [file:${/Attached file/.test(last)}] [hist:${messages.filter((m) => /Attached file/.test(typeof m.content === 'string' ? m.content : '')).length}]${bold}`;
 }
 
 function createServer() {

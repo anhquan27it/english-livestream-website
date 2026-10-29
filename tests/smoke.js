@@ -679,6 +679,29 @@ async function main() {
     assert.equal((await api(S1, 'DELETE', '/api/ai/chats/' + a.body.chatId)).status, 200);
     assert.equal((await api(S1, 'GET', '/api/ai/chats?classId=' + ielts.id)).body.chats.some((c) => c.id === a.body.chatId), false);
   });
+  await test('hỏi AI kèm ảnh và tệp: kiểm tra đầu vào, ảnh gửi dạng image_url, tệp chữ vào ngữ cảnh, trích PDF/TXT', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const ctx = { classId: ielts.id };
+    const a = await api(S2, 'POST', '/api/ai/chat', { ...ctx, newChat: true, message: 'What does this sign say?', attachments: [{ kind: 'image', name: 'sign.png', dataUrl: png }] });
+    assert.equal(a.status, 200, JSON.stringify(a.body)); assert.match(a.body.reply, /\[images:1\]/); assert.match(a.body.reply, /\[scope:true\]/);
+    const only = await api(S2, 'POST', '/api/ai/chat', { ...ctx, chatId: a.body.chatId, attachments: [{ kind: 'image', name: 'again.png', dataUrl: png }] });
+    assert.equal(only.status, 200); assert.match(only.body.reply, /\[images:1\]/); // không gõ chữ vẫn được nếu có ảnh
+    const txt = await api(S2, 'POST', '/api/ai/chat', { ...ctx, newChat: true, message: 'Correct this please', attachments: [{ kind: 'text', name: 'note.txt', text: 'The cat sat on the mat. She go to school.' }] });
+    assert.equal(txt.status, 200); assert.match(txt.body.reply, /\[file:true\]/); assert.match(txt.body.reply, /\[images:0\]/);
+    const follow = await api(S2, 'POST', '/api/ai/chat', { ...ctx, chatId: txt.body.chatId, message: 'And the second sentence?' });
+    assert.match(follow.body.reply, /\[hist:[1-9]\]/); // nội dung tệp vẫn nằm trong ngữ cảnh lượt sau
+    const saved = (await api(S2, 'GET', '/api/ai/chat?classId=' + ielts.id + '&chatId=' + a.body.chatId)).body.messages;
+    assert.equal(saved[0].attachments[0].name, 'sign.png'); assert.ok(!JSON.stringify(saved).includes('base64'), 'không lưu ảnh vào dữ liệu');
+    for (const bad of [[{ kind: 'image', name: 'x', dataUrl: 'data:text/html;base64,PGI+' }], [{ kind: 'image', name: 'x', dataUrl: 'javascript:alert(1)' }], Array(4).fill({ kind: 'image', name: 'x', dataUrl: png }), Array(5).fill({ kind: 'text', name: 'x', text: 'a' }), [{ kind: 'text', name: 'x', text: '   ' }], [{ kind: 'video' }], 'nope']) {
+      assert.equal((await api(S2, 'POST', '/api/ai/chat', { ...ctx, newChat: true, message: 'x', attachments: bad })).status, 400);
+    }
+    assert.equal((await api(S2, 'POST', '/api/ai/chat', { ...ctx, newChat: true })).status, 400);
+    const post = (name, body) => fetch(BASE + '/api/ai/extract', { method: 'POST', headers: { Authorization: 'Bearer ' + S2, 'X-Filename': encodeURIComponent(name) }, body });
+    const t = await post('a.txt', 'Hello teacher'); assert.equal(t.status, 200); assert.equal((await t.json()).text, 'Hello teacher');
+    const p = await post('b.pdf', tinyPdf('Present perfect rules')); assert.equal(p.status, 200); assert.match((await p.json()).text, /Present perfect/);
+    assert.equal((await post('c.docx', Buffer.from('PK'))).status, 400);
+    assert.equal((await fetch(BASE + '/api/ai/extract', { method: 'POST', body: 'x' })).status, 401);
+  });
   await test('hỏi đáp chung (không có bài) và lỗi AI không lộ chi tiết cho học sinh', async () => {
     const r = await api(S1, 'POST', '/api/ai/chat', { classId: ielts.id, message: 'What is present perfect?' });
     assert.equal(r.status, 200);

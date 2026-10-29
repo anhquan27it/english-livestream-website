@@ -525,3 +525,22 @@
 .aic-w:hover { background: rgba(124, 108, 255, .16); border-radius: 4px; }
 .t-pinned { display: flex; flex-direction: column; gap: 8px; }
 .t-pinned .t-lesson { padding: 9px 12px; }
+
+/* Chat AI: ảnh/tệp đính kèm */
+.aic-form .aic-clip { flex: none; width: 46px; height: 46px; border: 1px solid var(--aic-line); border-radius: 14px; background: var(--aic-card); color: var(--aic-muted); display: grid; place-items: center; cursor: pointer; }
+.aic-form .aic-clip:hover { color: var(--primary); border-color: var(--primary); }
+.aic-form .aic-clip svg { width: 18px; height: 18px; }
+.aic-att { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; }
+.aic-att[hidden] { display: none; }
+.aic-chip { display: flex; align-items: center; gap: 6px; max-width: 200px; padding: 4px 6px 4px 4px; border: 1px solid var(--aic-line); border-radius: 12px; background: var(--aic-card); font-size: 12px; }
+.aic-chip img { width: 34px; height: 34px; object-fit: cover; border-radius: 8px; }
+.aic-chip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.aic-chip button { border: 0; background: none; color: var(--aic-muted); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.aic-chip button:hover { color: var(--pink); }
+.aic-chip.loading { opacity: .7; }
+.aic-spin { width: 12px; height: 12px; border: 2px solid var(--aic-line); border-top-color: var(--primary); border-radius: 50%; animation: aicspin .7s linear infinite; }
+@keyframes aicspin { to { transform: rotate(360deg); } }
+.aic.drag { outline: 3px dashed var(--primary); outline-offset: -6px; }
+.aic-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.aic-thumbs img { max-width: 180px; max-height: 140px; border-radius: 10px; display: block; }
+.aic-file { background: rgba(255, 255, 255, .2); border-radius: 8px; padding: 2px 8px; font-size: 12px; font-weight: 700; }

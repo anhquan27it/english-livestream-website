@@ -27,7 +27,7 @@ Các thành phần tùy chọn (không bắt buộc để chạy):
 | **Zoom Meeting SDK** | Tùy chọn, cần tài khoản/app Zoom riêng: xem mục *Zoom Meeting SDK + LiveKit* bên dưới. Admin chọn dịch vụ mỗi ngày ở `/video-settings.html`. |
 | **Cho bạn bè ở máy khác vào thử** | `cloudflared tunnel --url http://localhost:3000` (xem mục *Cho bạn bè test qua link tạm*). Camera/micro cần **HTTPS hoặc localhost** — mở bằng `http://IP-LAN` trình duyệt sẽ chặn. |
 
-Lệnh thường dùng: `npm test` (79 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
+Lệnh thường dùng: `npm test` (80 kiểm tra, tự dựng server/mock tạm, không gọi dịch vụ thật), `npm run dev` (tự reload khi sửa server), `npm run dev:qa` (cổng 3101, dữ liệu tạm), `npm run test:load` (Socket.IO). Xóa `data/db.json` để reset dữ liệu. Mỗi lần sửa code server phải dừng và chạy lại `npm start`.
 
 **Lưu ý bảo mật:** `data/` (chứa API key AI, token Zoom, mật khẩu băm, bản ghi) và `data-mock/` **không** được commit — giữ nguyên như vậy. Không dán khóa LiveKit/Zoom/AI vào chat hoặc commit. Trước khi mở cho người lạ: đổi/xóa tài khoản mẫu `123456`, đổi mật khẩu admin, tạo lại mọi khóa từng bị lộ. Biến môi trường khác: `PORT`, `DATA_DIR`, `AI_CONCURRENCY`, `LIVEKIT_PUBLIC_URL`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_PUBLIC_CLIENT_ID`, `ZOOM_REDIRECT_URI`.
 

@@ -1,4 +1,5 @@
 // Chat box AI dùng chung: AiChat.mount(el, { classId, lessonId, dark, initialChatId, onInfo, onChatsChanged })
+// Có thể đính kèm ảnh (dán Ctrl+V, kéo thả, chọn tệp) và PDF/TXT/MD để hỏi về nội dung đó.
 // Mỗi bài/chung có nhiều hội thoại: tạo mới (chọn kiểu luyện), đổi tên, ghim, xóa; đọc to câu tiếng Anh; bấm từ in đậm để lưu vào sổ từ.
 const AiChat = (() => {
   const KINDS = {
@@ -25,13 +26,30 @@ const AiChat = (() => {
   const plain = (t) => cleanMath(t).replace(/\*\*/g, '').replace(/^\s*[*-] /gm, '').replace(/`/g, '');
   // Chỉ đọc các câu không có dấu tiếng Việt (giọng đọc tiếng Anh đọc tiếng Việt rất tệ)
   const englishPart = (t) => plain(t).split(/\n+/).flatMap((l) => l.split(/(?<=[.!?])\s+/)).map((s) => s.replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').trim()).filter((s) => s && !VI.test(s) && /[A-Za-z]/.test(s)).join(' ');
+  const MAX_ATT = 4, MAX_IMAGES = 3, IMAGE_CHARS = 480000; // 3 ảnh x 480k ký tự < giới hạn 2 MB của máy chủ
+  async function shrinkImage(file) {
+    let bmp;
+    try { bmp = await createImageBitmap(file); } catch { throw new Error('Không đọc được ảnh "' + file.name + '" (định dạng HEIC/lạ?). Hãy chụp màn hình hoặc lưu thành JPG/PNG.'); }
+    let max = 1280, q = 0.78, url = '';
+    for (let i = 0; i < 6; i++) {
+      const sc = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * sc)); c.height = Math.max(1, Math.round(bmp.height * sc));
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      url = c.toDataURL('image/jpeg', q);
+      if (url.length <= IMAGE_CHARS) break;
+      max *= 0.75; q = Math.max(0.5, q - 0.08);
+    }
+    if (bmp.close) bmp.close();
+    if (url.length > IMAGE_CHARS) throw new Error('Ảnh "' + file.name + '" quá phức tạp để gửi. Hãy cắt nhỏ vùng cần hỏi.');
+    return url;
+  }
   const ago = (t) => {
     const m = Math.round((Date.now() - (t || 0)) / 60000);
     return m < 1 ? 'vừa xong' : m < 60 ? m + ' phút trước' : m < 1440 ? Math.round(m / 60) + ' giờ trước' : Math.round(m / 1440) + ' ngày trước';
   };
 
   function mount(el, opts) {
-    const state = { busy: false, messages: [], lessonId: opts.lessonId || null, chatId: opts.initialChatId || null, kind: 'chat', title: '', pinned: false, chats: [], panel: null, fresh: false };
+    const state = { busy: false, messages: [], lessonId: opts.lessonId || null, chatId: opts.initialChatId || null, kind: 'chat', title: '', pinned: false, chats: [], panel: null, fresh: false, att: [] };
     el.innerHTML = `<div class="aic ${opts.dark ? 'dark' : ''}">
       <div class="aic-bar">
         <button type="button" class="aic-title" data-list-toggle title="Danh sách hội thoại"><span data-title>Hội thoại mới</span><i data-lucide="chevron-down"></i></button>
@@ -42,9 +60,10 @@ const AiChat = (() => {
       <div class="aic-panel" data-panel hidden></div>
       <div class="aic-list" data-list></div>
       <div class="aic-sugg" data-sugg></div>
-      <form class="aic-form" data-form><textarea rows="1" maxlength="1000" placeholder="Hỏi AI về bài học… (Enter để gửi)"></textarea><button aria-label="Gửi"><i data-lucide="send"></i></button></form></div>`;
+      <div class="aic-att" data-att hidden></div>
+      <form class="aic-form" data-form><button type="button" class="aic-clip" data-clip title="Đính kèm ảnh hoặc tệp PDF/TXT (có thể dán ảnh bằng Ctrl+V hoặc kéo thả)" aria-label="Đính kèm"><i data-lucide="paperclip"></i></button><input type="file" data-file accept="image/*,.pdf,.txt,.md" multiple hidden><textarea rows="1" maxlength="1000" placeholder="Hỏi AI… (Enter để gửi · dán ảnh bằng Ctrl+V)"></textarea><button class="aic-send" aria-label="Gửi"><i data-lucide="send"></i></button></form></div>`;
     const $ = (s) => el.querySelector(s);
-    const list = $('[data-list]'), input = $('textarea'), btn = $('[data-form] button');
+    const list = $('[data-list]'), input = $('textarea'), btn = $('.aic-send');
 
     const suggestions = () => {
       if (state.kind === 'roleplay') return ["Let's role-play: ordering food at a restaurant", "Let's role-play: checking in at a hotel", "Let's role-play: a job interview"];
@@ -62,7 +81,7 @@ const AiChat = (() => {
       } else {
         list.innerHTML = state.messages.map((m, i) => m.role === 'assistant'
           ? `<div class="aic-msg bot" data-i="${i}">${fmt(m.content)}<button type="button" class="aic-spk" data-say="${i}" title="Nghe phần tiếng Anh"><i data-lucide="volume-2"></i></button></div>`
-          : `<div class="aic-msg ${m.role === 'user' ? 'user' : 'err'}" data-i="${i}">${fmt(m.content)}</div>`).join('')
+          : `<div class="aic-msg ${m.role === 'user' ? 'user' : 'err'}" data-i="${i}">${attHtml(m.attachments)}${fmt(m.content)}</div>`).join('')
           + (state.busy ? '<div class="aic-typing"><i></i><i></i><i></i></div>' : '');
         list.querySelectorAll('[data-say]').forEach((b) => (b.onclick = () => {
           const text = englishPart(state.messages[+b.dataset.say].content);
@@ -82,6 +101,50 @@ const AiChat = (() => {
       btn.disabled = state.busy;
       icons();
     }
+
+    // ----- Ảnh/tệp đính kèm -----
+    const attHtml = (list) => (list && list.length ? `<div class="aic-thumbs">${list.map((a) => (a.preview ? `<img src="${a.preview}" alt="${esc(a.name)}">` : `<span class="aic-file">${a.kind === 'image' ? '🖼' : '📄'} ${esc(a.name)}</span>`)).join('')}</div>` : '');
+    const paintAtt = () => {
+      const box = $('[data-att]');
+      box.hidden = !state.att.length;
+      box.innerHTML = state.att.map((a) => `<div class="aic-chip ${a.loading ? 'loading' : ''}" data-aid="${a.id}">${a.preview ? `<img src="${a.preview}" alt="">` : '<span>📄</span>'}<b>${esc(a.name)}</b>${a.loading ? '<i class="aic-spin"></i>' : ''}<button type="button" data-rm="${a.id}" aria-label="Bỏ tệp">✕</button></div>`).join('');
+      box.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { state.att = state.att.filter((a) => a.id !== b.dataset.rm); paintAtt(); }));
+      btn.disabled = state.busy || state.att.some((a) => a.loading);
+    };
+    let attSeq = 0;
+    async function addFiles(files) {
+      for (const file of [...files]) {
+        if (state.att.length >= MAX_ATT) return toast('Tối đa ' + MAX_ATT + ' tệp mỗi tin nhắn.', 'error');
+        const isImg = /^image\//.test(file.type), isText = /\.(txt|md)$/i.test(file.name), isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+        if (!isImg && !isText && !isPdf) { toast('Chỉ gửi được ảnh, PDF, TXT hoặc MD. Với Word, hãy lưu thành PDF.', 'error'); continue; }
+        if (isImg && state.att.filter((a) => a.kind === 'image').length >= MAX_IMAGES) { toast('Tối đa ' + MAX_IMAGES + ' ảnh mỗi tin nhắn.', 'error'); continue; }
+        if (file.size > 12 * 1048576) { toast('Tệp "' + file.name + '" quá lớn (tối đa 12 MB).', 'error'); continue; }
+        const a = { id: 'a' + (++attSeq), kind: isImg ? 'image' : 'text', name: file.name || (isImg ? 'anh-dan.png' : 'tep'), loading: true };
+        state.att.push(a); paintAtt();
+        try {
+          if (isImg) { a.dataUrl = await shrinkImage(file); a.preview = a.dataUrl; }
+          else if (isText) a.text = (await file.text()).slice(0, 8000);
+          else {
+            const res = await fetch('/api/ai/extract', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Không đọc được tệp.');
+            a.text = d.text; if (d.truncated) toast('Tệp dài nên chỉ gửi phần đầu cho AI.');
+          }
+          a.loading = false;
+        } catch (e) { state.att = state.att.filter((x) => x !== a); toast(e.message, 'error'); }
+        paintAtt();
+      }
+    }
+    $('[data-clip]').onclick = () => $('[data-file]').click();
+    $('[data-file]').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+    input.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData ? e.clipboardData.files : [])].filter((f) => /^image\//.test(f.type));
+      if (files.length) { e.preventDefault(); addFiles(files); }
+    });
+    const root = $('.aic');
+    root.addEventListener('dragover', (e) => { if ([...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) { e.preventDefault(); root.classList.add('drag'); } });
+    root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('drag'); });
+    root.addEventListener('drop', (e) => { root.classList.remove('drag'); if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } });
 
     // ----- Danh sách hội thoại / chọn kiểu hội thoại mới -----
     const panel = $('[data-panel]');
@@ -191,14 +254,18 @@ const AiChat = (() => {
 
     async function send(text) {
       text = (text || '').trim();
-      if (!text || state.busy) return;
-      state.messages.push({ role: 'user', content: text });
+      const atts = state.att.filter((a) => !a.loading);
+      if ((!text && !atts.length) || state.busy || state.att.some((a) => a.loading)) return;
+      if (!text) text = 'Please look at my attachment and help me learn English from it.';
+      state.messages.push({ role: 'user', content: text, attachments: atts.map((a) => ({ kind: a.kind, name: a.name, preview: a.preview })) });
+      state.att = []; paintAtt();
       state.busy = true; state.fresh = false;
       input.value = ''; input.style.height = 'auto';
       state.panel = null; panel.hidden = true;
       paint();
       try {
         const body = { classId: opts.classId, lessonId: state.lessonId, message: text };
+        if (atts.length) body.attachments = atts.map((a) => (a.kind === 'image' ? { kind: 'image', name: a.name, dataUrl: a.dataUrl } : { kind: 'text', name: a.name, text: a.text }));
         if (state.chatId) body.chatId = state.chatId; else { body.newChat = true; body.kind = state.kind; }
         const d = await api('/api/ai/chat', { method: 'POST', body });
         state.messages.push({ role: 'assistant', content: d.reply });
@@ -213,6 +280,7 @@ const AiChat = (() => {
     }
 
     $('[data-form]').onsubmit = (e) => { e.preventDefault(); send(input.value); };
+    paintAtt();
     input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input.value); } };
     input.oninput = () => { input.style.height = 'auto'; input.style.height = Math.min(110, input.scrollHeight) + 'px'; };
     $('[data-new]').onclick = () => showPanel('new');
