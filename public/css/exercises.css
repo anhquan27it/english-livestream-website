@@ -6,8 +6,8 @@
 .ex-ai summary { cursor: pointer; font-weight: 800; color: var(--primary-600); }
 .ex-ai[open] summary { margin-bottom: 10px; }
 .ex-types { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-.ex-chip { flex-direction: row !important; align-items: center; gap: 6px !important; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; cursor: pointer; font-weight: 700 !important; }
-.ex-item { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; }
+.ex-chip { flex-direction: row !important; align-items: center; gap: 6px !important; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: #ffffff; cursor: pointer; font-weight: 700 !important; }
+.ex-item { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #ffffff; display: flex; flex-direction: column; gap: 10px; }
 .ex-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ex-tools { display: flex; align-items: center; gap: 6px; }
 .ex-tools label { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; }
@@ -19,7 +19,7 @@
 .ex-pair { display: flex; align-items: center; gap: 8px; }
 .ex-pair .input { flex: 1; min-width: 0; }
 .ex-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.ex-builder .modal-actions { position: sticky; bottom: 0; background: #fff; padding-top: 8px; justify-content: space-between; align-items: center; }
+.ex-builder .modal-actions { position: sticky; bottom: 0; background: #ffffff; padding-top: 8px; justify-content: space-between; align-items: center; }
 
 /* Làm bài */
 .ex-player { display: flex; flex-direction: column; gap: 14px; margin: 14px 0; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
@@ -36,7 +36,7 @@
 .ex-blank { display: inline-block; width: 130px; margin: 0 4px; padding: 4px 8px; text-align: center; }
 .ex-line { min-height: 48px; border: 2px dashed var(--line); border-radius: 12px; padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ex-pool { display: flex; flex-wrap: wrap; gap: 6px; }
-.ex-word { border: 2px solid var(--line); background: #fff; border-radius: 10px; padding: 6px 12px; font: inherit; font-weight: 700; cursor: pointer; }
+.ex-word { border: 2px solid var(--line); background: #ffffff; border-radius: 10px; padding: 6px 12px; font: inherit; font-weight: 700; cursor: pointer; }
 .ex-word:hover { border-color: var(--primary); }
 .ex-word.on { background: var(--primary-50); border-color: var(--primary); color: var(--primary-600); }
 .ex-left { min-width: 120px; font-weight: 700; }
@@ -49,7 +49,7 @@
 .ex-res { border: 1px solid var(--line); border-left: 5px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
 .ex-res.ok { border-left-color: #22b573; background: #f2fbf7; }
 .ex-res.bad { border-left-color: var(--pink); background: var(--pink-50); }
-.ex-res.part { border-left-color: #f5a524; background: #fff8ec; }
+.ex-res.part { border-left-color: #ff531a; background: #f7f5f4; }
 .ex-res.manual { border-left-color: var(--sky); background: var(--sky-50); }
 .ex-badge { font-weight: 800; font-size: 12px; margin-left: 6px; white-space: nowrap; }
 .ex-yours, .ex-exp { margin-top: 4px; color: var(--ink-2); }

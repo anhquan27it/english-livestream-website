@@ -11,11 +11,11 @@
 .catalog-display { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .catalog-sort { display: flex; align-items: center; }
 .catalog-sort .input { width: auto; font-size: 12px; padding: 9px 12px; }
-.catalog-views { display: flex; padding: 3px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.catalog-views { display: flex; padding: 3px; background: #ffffff; border: 1px solid var(--line); border-radius: 12px; }
 .catalog-views .icon-btn { width: 34px; height: 34px; border-radius: 8px; }
 .catalog-views [aria-pressed=true] { color: var(--primary); background: var(--primary-50); }
 .class-catalog { display: grid; gap: 12px; }
-.catalog-card { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 20px; background: #fff; border: 1px solid var(--line); border-radius: 18px; min-width: 0; }
+.catalog-card { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 20px; background: #ffffff; border: 1px solid var(--line); border-radius: 18px; min-width: 0; }
 .catalog-mark { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 25px; }
 .catalog-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .catalog-heading h3 { font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }

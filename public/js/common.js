@@ -59,7 +59,7 @@ function toast(text, type = '') {
   setTimeout(() => el.remove(), 3200);
 }
 
-const AVATAR_COLORS = ['#5b4cf5', '#f43f6e', '#ff8a3d', '#12b981', '#2f8cff', '#a855f7', '#0ea5a4'];
+const AVATAR_COLORS = ['#75708c', '#c59594', '#7f9fd0', '#6fa99a', '#8f87b8', '#b98fa8', '#6f9fb3'];
 function initials(name) {
   const parts = String(name || '?').trim().split(/\s+/);
   return ((parts.length > 1 ? parts[parts.length - 2][0] : '') + parts[parts.length - 1][0]).toUpperCase();
@@ -207,7 +207,7 @@ function buildSidebar(role, active) {
   if (!isAdmin) nav.push(['learning', '/learning.html', 'calendar-days', 'Học tập & lịch học'], ['devices', '/devices.html', 'video', 'Kiểm tra thiết bị']);
   const promo = isAdmin ? '' : role === 'teacher'
     ? '<div class="promo"><span class="emoji">🎙️</span><b>Teaching tip</b><p>Soạn bài trước, chiếu slide và chơi game để lớp học sôi động hơn.</p></div>'
-    : '<div class="promo" style="background:linear-gradient(150deg,#ff8a3d,#f43f6e)"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
+    : '<div class="promo"><span class="emoji">🔥</span><b>Keep going!</b><p>Học đều đặn 15 phút mỗi ngày giúp bạn tiến bộ nhanh hơn.</p></div>';
   const cta = isAdmin ? '' : role === 'teacher'
     ? '<a href="/teacher.html?new=1" class="side-cta" data-side-cta><span class="side-cta-ic"><i data-lucide="plus"></i></span><span>Tạo lớp mới<small>Học sinh vào bằng mã lớp</small></span></a>'
     : '<a href="/student.html?join=1" class="side-cta" data-side-cta><span class="side-cta-ic"><i data-lucide="key-round"></i></span><span>Nhập mã lớp<small>Tham gia lớp học mới</small></span></a>';
