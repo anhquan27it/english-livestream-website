@@ -1,4 +1,13 @@
 // Tiện ích dùng chung cho mọi trang
+// Selection translation is available in live classes and rendered lesson slides.
+if (['/live.html', '/lessons.html', '/learning.html'].includes(location.pathname)) {
+  const pronunciationScript = document.createElement('script');
+  pronunciationScript.src = '/js/word-pronunciation.js?v=14';
+  const selectionScript = document.createElement('script');
+  selectionScript.src = '/js/text-selection.js?v=1';
+  selectionScript.onload = () => document.head.appendChild(pronunciationScript);
+  document.head.appendChild(selectionScript);
+}
 const Auth = {
   get token() { return localStorage.getItem('englive_token'); },
   get user() { try { return JSON.parse(localStorage.getItem('englive_user')); } catch { return null; } },
@@ -116,13 +125,48 @@ function confirmModal(title, text, okLabel = 'Đồng ý', danger = true) {
   });
 }
 
+window.ChatterboxSpeech = (() => {
+  let audio, url, controller, version = 0;
+  function stop() {
+    version++; controller?.abort();
+    if (audio) { audio.pause(); audio = null; }
+    if (url) { URL.revokeObjectURL(url); url = null; }
+  }
+  async function play(text, { onStatus = () => {} } = {}) {
+    stop();
+    const request = version;
+    if (!Auth.token) throw new Error('Hãy đăng nhập để nghe giọng Chatterbox.');
+    const requestController = new AbortController(); controller = requestController;
+    const timeout = setTimeout(() => requestController.abort(), 240000);
+    onStatus('Đang tạo giọng Chatterbox… Lần đầu có thể cần chờ nạp mô hình.');
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Auth.token },
+        body: JSON.stringify({ text }), signal: requestController.signal,
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Chưa tạo được giọng Chatterbox. Hãy thử lại.');
+      }
+      if (!(response.headers.get('Content-Type') || '').startsWith('audio/')) throw new Error('Dịch vụ giọng đọc trả về dữ liệu không hợp lệ.');
+      const blob = await response.blob();
+      if (request !== version) return false;
+      url = URL.createObjectURL(blob); audio = new Audio(url);
+      audio.onended = () => { if (request === version) onStatus('Đã đọc xong bằng Chatterbox.'); };
+      audio.onerror = () => { if (request === version) onStatus('Không phát được âm thanh. Hãy bấm nghe lại.'); };
+      await audio.play();
+      if (request === version) onStatus('Đang đọc bằng Chatterbox…');
+      return true;
+    } catch (error) {
+      if (request !== version) return false;
+      if (error.name === 'AbortError') throw new Error('Tạo giọng đọc quá lâu. Hãy thử đoạn ngắn hơn.');
+      throw error;
+    } finally { clearTimeout(timeout); }
+  }
+  return { play, stop };
+})();
 function speak(text) {
-  if (!('speechSynthesis' in window)) return toast('Trình duyệt không hỗ trợ đọc phát âm.');
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
-  u.rate = 0.9;
-  speechSynthesis.speak(u);
+  return window.ChatterboxSpeech.play(text).catch(error => toast(error.message, 'error'));
 }
 
 let scheduleReminderTimer = null;

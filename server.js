@@ -184,6 +184,8 @@ app.post('/api/me/password', auth(), (req, res) => {
 lessons.recoverJobs();
 app.use(lessons.createRouter({ auth, findClass }));
 app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive }));
+app.use(require('./translationRoutes').createRouter({ auth }));
+app.use(require('./ttsRoutes').createRouter({ auth }));
 app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
 const pdfshare = pdfshareMod.init({ io, lives, auth, findClass, canAccess: canAccessLive, present });
 app.use(pdfshare.router);

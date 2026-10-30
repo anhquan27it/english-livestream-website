@@ -1,0 +1,2 @@
+# Pin the watermark dependency used by the verified local installation.
+resemble-perth @ git+https://github.com/resemble-ai/Perth.git@ff1c8ac55a976971245cdd53c18d6131ca00d993

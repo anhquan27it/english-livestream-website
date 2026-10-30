@@ -33,7 +33,7 @@ const Slides = (() => {
   function slideHtml(sc) {
     return `<div class="sl-head"><span class="sl-emoji">${esc(sc.emoji || '📘')}</span><h2>${esc(sc.title)}</h2></div>
       ${blocksHtml(sc)}
-      ${sc.bullets && sc.bullets.length ? `<ul class="sl-bullets">${sc.bullets.map((b, i) => `<li><b>${i + 1}</b><span>${esc(b)}</span></li>`).join('')}</ul>` : ''}
+      ${sc.bullets && sc.bullets.length ? `<ul class="sl-bullets">${sc.bullets.map((b, i) => `<li><b data-selection-boundary-ignore aria-hidden="true">${i + 1}</b><span>${esc(b)}</span></li>`).join('')}</ul>` : ''}
       ${sc.vocab && sc.vocab.length ? `<div class="sl-vocab">${sc.vocab.map((v) => `<div class="sl-word">${speakBtn(v.word)}<b>${esc(v.word)}</b><i>${esc(v.ipa)}</i><span>${esc(v.meaning)}</span>${v.example ? `<small>“${esc(v.example)}”</small>` : ''}</div>`).join('')}</div>` : ''}`;
   }
 
@@ -203,7 +203,7 @@ const Slides = (() => {
     const body = sc.type === 'slide' ? slideHtml(sc) : sc.type === 'quiz' || sc.type === 'poll' ? choiceHtml(ctx) : sc.type === 'match' ? matchHtml(ctx) : sc.type === 'fill' ? fillHtml(ctx) : sc.type === 'speak' ? speakHtml(ctx) : orderHtml(ctx);
     const act = ctx.activity;
     const timer = act && act.phase === 'open' && act.localEnds ? `<div class="sl-timer" data-deadline="${act.localEnds}" data-dur="${act.durationMs}"><span>⏱ <b></b></span><i><em></em></i></div>` : '';
-    root.innerHTML = `<div class="sl sl-${sc.type}"><div class="sl-in">${timer}${body}</div></div>`;
+    root.innerHTML = `<div class="sl sl-${sc.type}" data-translation-slide><div class="sl-in">${timer}${body}</div></div>`;
     bind(root, ctx);
     icons();
   }

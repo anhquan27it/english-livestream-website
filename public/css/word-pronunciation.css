@@ -1,0 +1,36 @@
+#word-pronunciation{position:fixed;z-index:2147483000;box-sizing:border-box;width:680px;max-width:calc(100vw - 16px);max-height:min(640px,calc(100dvh - 16px));overflow:auto;padding:18px 20px;border:1px solid #ddd9f5;border-radius:14px;background:#fff;color:#242338;box-shadow:0 12px 40px #25204730;font:14px/1.5 system-ui,sans-serif;text-align:left;user-select:text}
+#word-pronunciation[hidden]{display:none}
+#word-pronunciation .wp-title{font-size:10px;font-weight:700;letter-spacing:1px;color:#75718b;padding-right:22px}
+#word-pronunciation .wp-word{display:block;font-size:20px;line-height:1.5;color:#5142c6;margin:6px 0 12px;overflow-wrap:anywhere}
+#word-pronunciation .wp-ipa{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 10px;font:16px/1.6 'Segoe UI',sans-serif;margin:4px 0 14px;overflow-wrap:anywhere}
+#word-pronunciation .wp-entry{display:block;box-sizing:border-box;max-width:100%;padding:4px 8px;border-radius:6px;background:#f5f4fc}
+#word-pronunciation .wp-entry-word{font-weight:600;margin-right:5px}
+@media(max-width:480px){#word-pronunciation{padding:16px}#word-pronunciation .wp-word{font-size:18px}#word-pronunciation .wp-ipa{font-size:15px;gap:6px}}
+#word-pronunciation .wp-close{position:absolute;right:8px;top:6px;border:0;background:transparent;color:#777;font:26px/1.2 system-ui;cursor:pointer;padding:4px 8px}
+#word-pronunciation .wp-listen{display:inline-flex;align-items:center;border:0;border-radius:8px;padding:10px 14px;background:#5b4cf5;color:#fff;font:600 14px system-ui;cursor:pointer}
+#word-pronunciation button:focus-visible,#word-pronunciation a:focus-visible{outline:3px solid #978bff;outline-offset:3px}
+#word-pronunciation .wp-status{font-size:12px;color:#666078;margin:10px 0 4px}
+#word-pronunciation a{font-size:10px;color:#79718e}
+#word-pronunciation .wp-retry{border:0;background:transparent;color:#5142c6;font:13px system-ui;cursor:pointer;padding:10px 0;margin-left:10px}
+#word-pronunciation .wp-retry[hidden]{display:none}
+#word-pronunciation .wp-listen:disabled{opacity:.55;cursor:default}
+/* Compact by default; reserve horizontal space only for longer selections. */
+#word-pronunciation{width:360px;padding:12px 14px;border-radius:12px;max-height:min(380px,55dvh);font-size:13px}
+#word-pronunciation[data-long="true"]{width:560px}
+#word-pronunciation .wp-title{font-size:9px;letter-spacing:.7px}
+#word-pronunciation .wp-word{font-size:17px;line-height:1.4;margin:7px 20px 9px 0}
+#word-pronunciation .wp-ipa{font-size:14px;line-height:1.5;gap:5px 6px;margin:0 0 10px}
+#word-pronunciation .wp-entry{padding:3px 6px}
+#word-pronunciation .wp-close{font-size:22px;right:4px;top:4px;padding:3px 7px}
+#word-pronunciation .wp-listen{padding:7px 11px;font-size:13px;border-radius:7px}
+#word-pronunciation .wp-status{margin:7px 0 0;font-size:11px}
+#word-pronunciation .wp-status[hidden]{display:none}
+#word-pronunciation .wp-info{display:inline-block;vertical-align:middle;margin-left:10px;color:#79718e;font-size:11px}
+#word-pronunciation .wp-info summary{cursor:pointer;list-style:none}
+#word-pronunciation .wp-info summary::-webkit-details-marker{display:none}
+#word-pronunciation .wp-info summary::after{content:' ▾'}
+#word-pronunciation .wp-info[open]{display:block;margin:9px 0 0;padding-top:8px;border-top:1px solid #eeeaf8}
+#word-pronunciation .wp-info[open] summary::after{content:' ▴'}
+#word-pronunciation .wp-info p{margin:6px 0;font-size:11px}
+#word-pronunciation .wp-retry{font-size:12px;padding:6px 0}
+@media(max-width:480px){#word-pronunciation,#word-pronunciation[data-long="true"]{width:360px;max-height:50dvh;padding:11px 12px}#word-pronunciation .wp-word{font-size:16px}}

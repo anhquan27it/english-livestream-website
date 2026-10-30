@@ -4,3 +4,5 @@ data-mock/
 .claude/
 tools/
 .test-tmp/
+__pycache__/
+*.pyc

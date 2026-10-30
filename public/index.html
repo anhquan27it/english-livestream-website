@@ -231,7 +231,10 @@
     }
 
     document.querySelectorAll('[data-auth]').forEach((b) => (b.onclick = () => authModal(b.dataset.auth, b.dataset.role)));
-    if (new URLSearchParams(location.search).has('login')) authModal('login');
+    if (new URLSearchParams(location.search).has('login')) {
+      authModal('login');
+      if (new URLSearchParams(location.search).get('login') === 'admin') document.querySelector('[data-admin-login]').click();
+    }
     icons();
   </script>
 </body>
