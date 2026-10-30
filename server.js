@@ -223,6 +223,7 @@ app.post('/api/me/password', auth(), (req, res) => {
 lessons.recoverJobs();
 app.use(lessons.createRouter({ auth, findClass }));
 app.use(aiRoutes.createRouter({ auth, lives, findClass, canAccess: canAccessLive }));
+app.use(require('./translationRoutes').createRouter({ auth }));
 app.use(recordings.createRouter({ auth, findClass, canAccess: canAccessLive }));
 const listening = require('./listening').init({ io, lives, auth, findClass, canAccess: canAccessLive });
 app.use(listening.router);

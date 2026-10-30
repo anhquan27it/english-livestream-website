@@ -104,14 +104,15 @@ const WordPop = (() => {
     if (scene && scene.vocab) scene.vocab.forEach((v) => { const k = clean(v.word); if (k) lex.set(k, { word: v.word, ipa: v.ipa, meaning: v.meaning, example: v.example, pos: '' }); });
     if (scene && scene.type === 'slide') wrapWords(root);
     root.querySelectorAll('.wp-w').forEach((w) => {
-      const open = () => show(w.textContent, w.getBoundingClientRect(), w.parentElement.textContent);
-      w.onclick = (e) => { e.stopPropagation(); open(); };
+      const open = () => { window.SlideTranslation?.close(); show(w.textContent, w.getBoundingClientRect(), w.parentElement.textContent); };
+      w.onclick = (e) => { if (getSelection()?.toString().trim()) return; e.stopPropagation(); open(); };
       w.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
   }
 
   // Bôi đen từ/cụm từ trong slide -> hiện hộp tra
   function onSelect() {
+    if (window.SlideTranslation) return; // Hộp dịch mới xử lý vùng bôi đen; giữ bấm từ và lưu sổ từ.
     const sel = getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
     const range = sel.getRangeAt(0);

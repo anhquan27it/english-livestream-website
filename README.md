@@ -228,6 +228,15 @@ Muốn chạy lâu dài, công khai: thuê VPS + HTTPS (Caddy/Nginx) + tên mi�
 - **Quản lý nhiều lớp**: Admin, trợ giảng, thời khoá biểu, nhắc lịch qua email/push.
 - **Công khai**: dữ liệu bền (PostgreSQL), đăng ký giáo viên cần duyệt, Cài đặt AI chỉ dành cho quản trị viên.
 
+## Dịch Anh–Việt trong slide
+
+- Trên slide đang chiếu, slide xem trước trong Bài giảng hoặc slide xem lại trong Học tập, bôi đen trọn từ/câu tiếng Anh để xem bản dịch và phiên âm. Tối đa 2.000 ký tự mỗi lần; nhấn Escape hoặc bấm bên ngoài để đóng.
+- Bấm vào từ vựng được gạch chân vẫn mở hộp tra từ cũ, có nút lưu vào sổ từ. Nút Nghe dùng giọng đọc sẵn có của trình duyệt.
+- Dịch dùng AnyLang (Google, Anh → Việt), không cần cấu hình khóa trả phí hay sử dụng hạn mức AI của EngLive. Cần internet và phụ thuộc khả năng đáp ứng/giới hạn của nhà cung cấp. Văn bản được chọn gửi tới dịch vụ dịch; phiên âm ưu tiên CMU cục bộ và tra Free Dictionary API khi thiếu.
+- Hai API yêu cầu đăng nhập, mỗi API giới hạn 30 lượt/phút/người, dùng chung tối đa 4 lượt đang xử lý. Có bộ nhớ đệm và nút thử lại khi lỗi mạng.
+- Sau khi cập nhật mã: `npm install`, khởi động lại `npm start` trong cửa sổ đang có cấu hình hệ thống, rồi tải lại trang (Ctrl+F5). Không cần đổi schema PostgreSQL.
+- Kiểm tra: `npm run test:translation`, `npm run test:pronunciation`, `npm run test:selection`. Nguồn và giấy phép: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## Kỹ thuật
 
 - Node.js + Express + Socket.IO (kênh điều khiển, chấm điểm, quyền), video qua LiveKit (SFU) / Zoom Meeting SDK / WebRTC P2P dự phòng.

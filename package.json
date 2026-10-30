@@ -18,6 +18,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node tests/smoke.js",
+    "test:translation": "node tests/translation-check.js",
+    "test:pronunciation": "node tests/pronunciation-check.js",
+    "test:selection": "node tests/selection-check.js",
     "admin:create": "node scripts/create-admin.js",
     "backup:restore": "node scripts/restore-backup.js",
     "test:load": "node tests/load-control.js",
@@ -32,6 +35,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "anylang": "4.0.0",
+    "cmu-pronouncing-dictionary": "3.0.0",
     "express": "^4.22.3",
     "livekit-server-sdk": "^2.19.2",
     "pg": "^8.23.1",
